@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "sqlite:///./coleta_flow.db"
+DATABASE_URL = "sqlite:///./backend/app/database/db/coleta_flow.db"
 
 engine = create_engine(
     DATABASE_URL,
