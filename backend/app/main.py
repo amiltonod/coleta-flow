@@ -1,41 +1,64 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+import shutil
+
+from fastapi import FastAPI
+from fastapi import Request
+from fastapi import UploadFile
+from fastapi import File
+
 from fastapi.templating import Jinja2Templates
 
-from backend.app.database.database import Base, SessionLocal, engine
+from backend.app.database.database import Base
+from backend.app.database.database import engine
+from backend.app.database.database import SessionLocal
 
 from backend.app.models.client import Client
-from backend.app.models.schedule import Schedule
 
-Base.metadata.create_all(bind=engine)
+from backend.app.services.import_service import importar_clientes
+
 
 app = FastAPI()
 
-templates = Jinja2Templates(directory="backend/app/templates")
+Base.metadata.create_all(bind=engine)
 
-app.mount(
-    "/static",
-    StaticFiles(directory="backend/app/static"),
-    name="static"
+templates = Jinja2Templates(
+    directory="backend/app/templates"
 )
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 def home(request: Request):
+
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html"
+    )
+
+
+@app.post("/upload")
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...)
+):
+
+    file_path = "./uploads/" + file.filename
+
+    with open(file_path, "wb") as buffer:
+
+        shutil.copyfileobj(file.file, buffer)
+
+    importar_clientes(file_path)
 
     db = SessionLocal()
 
     clientes = db.query(Client).all()
-    schedules = db.query(Schedule).all()
 
     db.close()
 
     return templates.TemplateResponse(
         request=request,
-        name="index.html",
+        name="schedule.html",
         context={
-            "clientes": clientes,
-            "schedules": schedules
+            "request": request,
+            "clientes": clientes
         }
     )
