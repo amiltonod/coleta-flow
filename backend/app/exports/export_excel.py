@@ -1,6 +1,6 @@
 import pandas as pd
 
-from backend.app.database.database import SessionLocal
+from backend.database.database import SessionLocal
 from backend.app.models.schedule import Schedule
 
 db = SessionLocal()

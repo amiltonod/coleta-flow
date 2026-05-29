@@ -7,9 +7,9 @@ from fastapi import File
 
 from fastapi.templating import Jinja2Templates
 
-from backend.app.database.database import Base
-from backend.app.database.database import engine
-from backend.app.database.database import SessionLocal
+from backend.database.database import Base
+from backend.database.database import engine
+from backend.database.database import SessionLocal
 
 from backend.app.models.client import Client
 

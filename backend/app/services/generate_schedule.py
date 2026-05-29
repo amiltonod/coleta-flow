@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from backend.app.database.database import SessionLocal
+from backend.database.database import SessionLocal
 from backend.app.models.client import Client
 from backend.app.models.schedule import Schedule
 
