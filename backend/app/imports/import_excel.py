@@ -16,7 +16,7 @@ for index, row in df.iterrows():
 
     codigo = str(row["Unnamed: 0"]) if pd.notna(row["Unnamed: 0"]) else None
 
-    nome = str(
+    nome_completo = str(
         row["                      Planejamento das Coletas (Caixas para Trocas)"]
     ) if pd.notna(
         row["                      Planejamento das Coletas (Caixas para Trocas)"]
@@ -24,20 +24,27 @@ for index, row in df.iterrows():
 
     observacao = str(row["Unnamed: 15"]) if pd.notna(row["Unnamed: 15"]) else None
 
-    # Ignorar linhas vazias
-    if not codigo or not nome:
+    if not codigo or not nome_completo:
         continue
 
-    # Criar cliente
+    partes = nome_completo.split(" - ")
+
+    nome = partes[0] if len(partes) > 0 else None
+    cidade = partes[1] if len(partes) > 1 else None
+    unidade = partes[2] if len(partes) > 2 else None
+
     client = Client(
         codigo=codigo,
         nome=nome,
-        frequencia_dias=None
+        cidade=cidade,
+        unidade=unidade,
+        observacao=observacao,
+        frequencia_dias=None,
+        dia_preferencial=None
     )
 
     db.add(client)
 
-# Salvar banco
 db.commit()
 
 print("Importação concluída com sucesso!")
