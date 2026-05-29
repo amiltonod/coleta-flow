@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Date
 
-from backend.database.database import Base
+from backend.app.database import Base
 
 
 class Schedule(Base):
