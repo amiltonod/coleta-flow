@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>ColetaFlow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+<div class="container mt-5">
+
+    <h1 class="mb-4">🚛 ColetaFlow</h1>
+
+    <!-- Upload de planilha -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Importar Planilha</h5>
+            <form action="/upload" method="post" enctype="multipart/form-data" class="d-flex gap-2 align-items-center">
+                <input type="file" name="file" class="form-control" accept=".xlsx">
+                <button class="btn btn-primary text-nowrap">Enviar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Gerar programação -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Gerar Programação</h5>
+            <p class="text-muted small">Distribui os clientes cadastrados na semana automaticamente.</p>
+            <form action="/gerar-programacao" method="post">
+                <button class="btn btn-success">Gerar Programação</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela de clientes -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Clientes Cadastrados ({{ clientes | length }})</h5>
+            {% if clientes %}
+            <table class="table table-striped table-sm">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nome</th>
+                        <th>Cidade</th>
+                        <th>Unidade</th>
+                        <th>Última Coleta</th>
+                        <th>Próxima Coleta</th>
+                        <th>Observação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cliente in clientes %}
+                    <tr>
+                        <td>{{ cliente.codigo }}</td>
+                        <td>{{ cliente.nome }}</td>
+                        <td>{{ cliente.cidade or "—" }}</td>
+                        <td>{{ cliente.unidade or "—" }}</td>
+                        <td>{{ cliente.ultima_coleta or "—" }}</td>
+                        <td>{{ cliente.proxima_coleta or "—" }}</td>
+                        <td>{{ cliente.observacao or "—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted">Nenhum cliente importado ainda.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Tabela de programação -->
+    <div class="card mb-5">
+        <div class="card-body">
+            <h5 class="card-title">Programação de Coletas ({{ schedules | length }})</h5>
+            {% if schedules %}
+            <table class="table table-striped table-sm">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Cliente</th>
+                        <th>Unidade</th>
+                        <th>Data</th>
+                        <th>Dia</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in schedules %}
+                    <tr>
+                        <td>{{ s.codigo_cliente }}</td>
+                        <td>{{ s.cliente }}</td>
+                        <td>{{ s.unidade or "—" }}</td>
+                        <td>{{ s.data_coleta }}</td>
+                        <td>{{ s.dia_semana }}</td>
+                        <td>
+                            <span class="badge
+                                {% if s.status == 'Programado' %}bg-primary
+                                {% elif s.status == 'Concluído' %}bg-success
+                                {% else %}bg-secondary{% endif %}">
+                                {{ s.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted">Nenhuma programação gerada ainda.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+</body>
+</html>
