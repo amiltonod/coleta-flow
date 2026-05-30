@@ -14,6 +14,8 @@ DIAS_SEMANA = {
     6: "Domingo",
 }
 
+DIAS_SEMANA_REVERSO = {v: k for k, v in DIAS_SEMANA.items()}
+
 
 def ajustar_para_dia_util(data: date) -> date:
     """Se cair no sábado ou domingo, avança para segunda."""
@@ -22,29 +24,55 @@ def ajustar_para_dia_util(data: date) -> date:
     return data
 
 
+def proxima_data_para_dia(dia_nome: str, segunda: date) -> date:
+    """
+    Dado o nome do dia (ex: 'Terça') e a segunda-feira da semana,
+    retorna a data correta daquele dia na mesma semana.
+    """
+    offset = DIAS_SEMANA_REVERSO.get(dia_nome, 0)
+    return segunda + timedelta(days=offset)
+
+
 def gerar_programacao(db: Session) -> dict:
     """
-    Gera a programação usando: próxima coleta = última coleta + frequência de dias.
-    Se não tiver última coleta ou frequência, ignora o cliente.
-    Nunca agenda no sábado ou domingo.
+    Gera a programação da semana seguinte.
+    Clientes fixos vão pro dia fixo.
+    Clientes normais usam ultima_coleta + frequencia_dias.
     """
     clientes = db.query(Client).all()
 
     if not clientes:
         return {"gerados": 0, "mensagem": "Nenhum cliente encontrado no banco."}
 
+    hoje = date.today()
+    dias_ate_segunda = (7 - hoje.weekday()) % 7 or 7
+    segunda = hoje + timedelta(days=dias_ate_segunda)
+
     gerados = 0
     ignorados = 0
 
     for cliente in clientes:
 
-        if not cliente.ultima_coleta or not cliente.frequencia_dias:
+        # Cliente fixo — vai sempre pro dia fixo da semana
+        if cliente.fixo and cliente.dia_fixo:
+            data_coleta = proxima_data_para_dia(cliente.dia_fixo, segunda)
+            dia_semana = cliente.dia_fixo
+
+        # Cliente normal — calcula pela última coleta + frequência
+        elif cliente.ultima_coleta and cliente.frequencia_dias:
+            data_coleta = cliente.ultima_coleta + timedelta(days=cliente.frequencia_dias)
+            data_coleta = ajustar_para_dia_util(data_coleta)
+            dia_semana = DIAS_SEMANA.get(data_coleta.weekday(), "Segunda")
+
+            # Se a data calculada não cair na próxima semana, ignora
+            dias_semana_proxima = [segunda + timedelta(days=i) for i in range(5)]
+            if data_coleta not in dias_semana_proxima:
+                ignorados += 1
+                continue
+
+        else:
             ignorados += 1
             continue
-
-        data_coleta = cliente.ultima_coleta + timedelta(days=cliente.frequencia_dias)
-        data_coleta = ajustar_para_dia_util(data_coleta)
-        dia_semana = DIAS_SEMANA.get(data_coleta.weekday(), "Segunda")
 
         schedule = Schedule(
             cliente=cliente.nome,
@@ -53,6 +81,7 @@ def gerar_programacao(db: Session) -> dict:
             data_coleta=data_coleta,
             dia_semana=dia_semana,
             status="Programado",
+            fixo=cliente.fixo,
         )
 
         db.add(schedule)

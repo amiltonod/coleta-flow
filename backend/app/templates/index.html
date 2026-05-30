@@ -15,14 +15,50 @@
             padding: 4px 6px;
             margin-bottom: 4px;
             background: #f8f9fa;
-            cursor: text;
+            cursor: grab;
+            position: relative;
         }
-        .celula-cliente:focus {
-            outline: 2px solid #0d6efd;
-            background: #fff;
+        .celula-cliente:hover .acoes-card {
+            display: flex;
+        }
+        .acoes-card {
+            display: none;
+            position: absolute;
+            top: 3px;
+            right: 3px;
+            gap: 3px;
+        }
+        .acoes-card button {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+        .acoes-card button:hover {
+            background: #dee2e6;
         }
         .col-dia {
             min-width: 180px;
+        }
+        .col-dia.dragover-ativo {
+            background: #e7f1ff;
+            border-radius: 8px;
+        }
+        .resultado-busca {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .resultado-busca .item-busca {
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .resultado-busca .item-busca:hover {
+            background: #e7f1ff;
         }
     </style>
 </head>
@@ -34,7 +70,6 @@
 
     <!-- Ações -->
     <div class="row g-3 mb-4 no-print">
-
         <div class="col-auto">
             <div class="card">
                 <div class="card-body py-2">
@@ -47,7 +82,6 @@
                 </div>
             </div>
         </div>
-
         <div class="col-auto">
             <div class="card">
                 <div class="card-body py-2">
@@ -61,7 +95,6 @@
                 </div>
             </div>
         </div>
-
     </div>
 
     <!-- Grade semanal -->
@@ -84,6 +117,7 @@
                         <th>Última Coleta</th>
                         <th>Próxima Coleta</th>
                         <th>Observação</th>
+                        <th>Fixo</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -97,6 +131,7 @@
                         <td>{{ cliente.ultima_coleta or "—" }}</td>
                         <td>{{ cliente.proxima_coleta or "—" }}</td>
                         <td>{{ cliente.observacao or "—" }}</td>
+                        <td>{{ "📌 " + cliente.dia_fixo if cliente.fixo else "—" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -110,8 +145,92 @@
 
 </div>
 
+<!-- Modal Editar Cliente -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">✏️ Editar Cliente</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editClienteId">
+                <div class="mb-3">
+                    <label class="form-label">Código</label>
+                    <input type="text" id="editCodigo" class="form-control" disabled>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nome</label>
+                    <input type="text" id="editNome" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Cidade</label>
+                    <input type="text" id="editCidade" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Unidade</label>
+                    <input type="text" id="editUnidade" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Frequência (dias)</label>
+                    <input type="number" id="editFrequencia" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Observação</label>
+                    <input type="text" id="editObservacao" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-primary" onclick="salvarEdicaoCliente()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Adicionar Coleta -->
+<div class="modal fade" id="modalAdicionar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">➕ Adicionar Coleta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="adicionarDia">
+                <div class="mb-3">
+                    <label class="form-label">Buscar cliente (código ou nome)</label>
+                    <input type="text" id="campoBusca" class="form-control" placeholder="Digite para buscar..." oninput="buscarCliente()">
+                    <div id="resultadoBusca" class="resultado-busca mt-1" style="display:none"></div>
+                </div>
+                <div id="clienteSelecionado" style="display:none">
+                    <div class="alert alert-success py-2">
+                        <strong id="nomeClienteSelecionado"></strong><br>
+                        <small id="detalhesClienteSelecionado"></small>
+                    </div>
+                </div>
+                <input type="hidden" id="codigoClienteSelecionado">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-success" onclick="confirmarAdicao()">Adicionar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const DIAS_NOMES = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+let dragId = null;
+let modalEditar = null;
+let modalAdicionar = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+    modalEditar = new bootstrap.Modal(document.getElementById("modalEditar"));
+    modalAdicionar = new bootstrap.Modal(document.getElementById("modalAdicionar"));
+    carregarSemana();
+});
 
 function formatarData(iso) {
     const [ano, mes, dia] = iso.split("-");
@@ -121,9 +240,11 @@ function formatarData(iso) {
 async function carregarSemana() {
     const res = await fetch("/programacao-semana");
     const data = await res.json();
+    renderizarGrade(data);
+}
 
+function renderizarGrade(data) {
     const container = document.getElementById("gradeSemana");
-
     let html = `
         <div class="card grade-semana">
             <div class="card-body">
@@ -134,23 +255,40 @@ async function carregarSemana() {
     data.dias.forEach((dia, i) => {
         const clientes = data.programacao[dia] || [];
         html += `
-            <div class="col col-dia">
+            <div class="col col-dia"
+                id="col-${dia}"
+                ondragover="allowDrop(event, '${dia}')"
+                ondragleave="dragLeave(event, '${dia}')"
+                ondrop="drop(event, '${dia}')"
+                data-dia="${dia}">
                 <div class="fw-bold text-center bg-primary text-white rounded py-1 mb-2">
                     ${DIAS_NOMES[i]}<br>
                     <small>${formatarData(dia)}</small>
                 </div>
+                <button class="btn btn-outline-success btn-sm w-100 mb-2 no-print"
+                    onclick="abrirAdicionar('${dia}')">➕ Adicionar</button>
         `;
+
         clientes.forEach(c => {
             const texto = `${c.codigo} - ${c.cliente}${c.unidade ? " - " + c.unidade : ""}`;
+            const fixoClass = c.fixo ? "border-warning bg-warning bg-opacity-10" : "";
+            const pinIcon = c.fixo ? "📌" : "📍";
+
             html += `
-                <div
-                    class="celula-cliente"
-                    contenteditable="true"
+                <div class="celula-cliente ${fixoClass}"
+                    draggable="true"
                     data-id="${c.id}"
-                    onblur="salvarEdicao(this, ${c.id})"
-                >${texto}</div>
+                    ondragstart="dragStart(event, ${c.id})">
+                    ${texto}
+                    <div class="acoes-card no-print">
+                        <button onclick="toggleFixo(${c.id}, '${c.codigo}', ${c.fixo}, '${dia}')" title="${c.fixo ? 'Desfixar' : 'Fixar'}">${pinIcon}</button>
+                        <button onclick="abrirEditar('${c.codigo}')" title="Editar">✏️</button>
+                        <button onclick="excluirColeta(${c.id})" title="Excluir">🗑️</button>
+                    </div>
+                </div>
             `;
         });
+
         if (clientes.length === 0) {
             html += `<div class="text-muted small text-center">—</div>`;
         }
@@ -161,14 +299,182 @@ async function carregarSemana() {
     container.innerHTML = html;
 }
 
-async function salvarEdicao(el, id) {
-    const texto = el.innerText.trim();
-    await fetch(`/programacao/${id}`, {
+// ── DRAG AND DROP ──────────────────────────────────────────
+
+function dragStart(event, id) {
+    dragId = id;
+    event.dataTransfer.effectAllowed = "move";
+}
+
+function allowDrop(event, dia) {
+    event.preventDefault();
+    document.getElementById(`col-${dia}`).classList.add("dragover-ativo");
+}
+
+function dragLeave(event, dia) {
+    document.getElementById(`col-${dia}`).classList.remove("dragover-ativo");
+}
+
+async function drop(event, novaDia) {
+    event.preventDefault();
+    document.getElementById(`col-${novaDia}`).classList.remove("dragover-ativo");
+    if (!dragId) return;
+    await fetch(`/programacao/${dragId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cliente: texto })
+        body: JSON.stringify({ data_coleta: novaDia })
     });
+    dragId = null;
+    await carregarSemana();
 }
+
+// ── PIN / FIXAR ────────────────────────────────────────────
+
+async function toggleFixo(scheduleId, codigo, estaFixo, dia) {
+    if (estaFixo) {
+        if (!confirm("Tem certeza que deseja remover o pin? Esta coleta não será mais fixa nas próximas semanas.")) return;
+
+        const res = await fetch(`/clientes/buscar?q=${codigo}`);
+        const lista = await res.json();
+        const cliente = lista.find(c => c.codigo === codigo);
+        if (!cliente) return;
+
+        await fetch(`/clientes/${cliente.id}/fixar`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fixo: false, dia_fixo: null })
+        });
+
+    } else {
+        // Pega o nome do dia a partir da data
+        const diaSemanaIndex = new Date(dia + "T00:00:00").getDay();
+        // getDay(): 0=Dom,1=Seg,2=Ter,3=Qua,4=Qui,5=Sex
+        const nomeDia = DIAS_NOMES[diaSemanaIndex - 1];
+
+        if (!confirm(`Tem certeza que deseja fixar esta coleta toda semana na ${nomeDia}?`)) return;
+
+        const res = await fetch(`/clientes/buscar?q=${codigo}`);
+        const lista = await res.json();
+        const cliente = lista.find(c => c.codigo === codigo);
+        if (!cliente) return;
+
+        await fetch(`/clientes/${cliente.id}/fixar`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fixo: true, dia_fixo: nomeDia })
+        });
+    }
+
+    await carregarSemana();
+}
+
+// ── EDITAR CLIENTE ─────────────────────────────────────────
+
+async function abrirEditar(codigo) {
+    const res = await fetch(`/clientes/buscar?q=${codigo}`);
+    const lista = await res.json();
+    const cliente = lista.find(c => c.codigo === codigo);
+    if (!cliente) return alert("Cliente não encontrado");
+
+    document.getElementById("editClienteId").value = cliente.id;
+    document.getElementById("editCodigo").value = cliente.codigo;
+    document.getElementById("editNome").value = cliente.nome;
+    document.getElementById("editCidade").value = cliente.cidade;
+    document.getElementById("editUnidade").value = cliente.unidade;
+    document.getElementById("editFrequencia").value = cliente.frequencia_dias || "";
+    document.getElementById("editObservacao").value = "";
+
+    modalEditar.show();
+}
+
+async function salvarEdicaoCliente() {
+    const id = document.getElementById("editClienteId").value;
+    await fetch(`/clientes/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            nome: document.getElementById("editNome").value,
+            cidade: document.getElementById("editCidade").value,
+            unidade: document.getElementById("editUnidade").value,
+            frequencia_dias: parseInt(document.getElementById("editFrequencia").value) || null,
+            observacao: document.getElementById("editObservacao").value,
+        })
+    });
+    modalEditar.hide();
+    await carregarSemana();
+}
+
+// ── EXCLUIR COLETA ─────────────────────────────────────────
+
+async function excluirColeta(id) {
+    if (!confirm("Remover esta coleta da programação?")) return;
+    await fetch(`/programacao/${id}`, { method: "DELETE" });
+    await carregarSemana();
+}
+
+// ── ADICIONAR COLETA ───────────────────────────────────────
+
+function abrirAdicionar(dia) {
+    document.getElementById("adicionarDia").value = dia;
+    document.getElementById("campoBusca").value = "";
+    document.getElementById("resultadoBusca").style.display = "none";
+    document.getElementById("clienteSelecionado").style.display = "none";
+    document.getElementById("codigoClienteSelecionado").value = "";
+    modalAdicionar.show();
+}
+
+let buscaTimeout = null;
+
+async function buscarCliente() {
+    const q = document.getElementById("campoBusca").value.trim();
+    const resultado = document.getElementById("resultadoBusca");
+
+    if (q.length < 2) {
+        resultado.style.display = "none";
+        return;
+    }
+
+    clearTimeout(buscaTimeout);
+    buscaTimeout = setTimeout(async () => {
+        const res = await fetch(`/clientes/buscar?q=${encodeURIComponent(q)}`);
+        const lista = await res.json();
+
+        if (lista.length === 0) {
+            resultado.innerHTML = `<div class="item-busca text-muted">Nenhum cliente encontrado</div>`;
+        } else {
+            resultado.innerHTML = lista.map(c => `
+                <div class="item-busca" onclick="selecionarCliente('${c.codigo}', '${c.nome}', '${c.unidade}')">
+                    <strong>${c.codigo}</strong> — ${c.nome} ${c.unidade ? "- " + c.unidade : ""}
+                </div>
+            `).join("");
+        }
+        resultado.style.display = "block";
+    }, 300);
+}
+
+function selecionarCliente(codigo, nome, unidade) {
+    document.getElementById("codigoClienteSelecionado").value = codigo;
+    document.getElementById("nomeClienteSelecionado").textContent = `${codigo} — ${nome}`;
+    document.getElementById("detalhesClienteSelecionado").textContent = unidade || "";
+    document.getElementById("clienteSelecionado").style.display = "block";
+    document.getElementById("resultadoBusca").style.display = "none";
+    document.getElementById("campoBusca").value = `${codigo} — ${nome}`;
+}
+
+async function confirmarAdicao() {
+    const codigo = document.getElementById("codigoClienteSelecionado").value;
+    const dia = document.getElementById("adicionarDia").value;
+    if (!codigo) return alert("Selecione um cliente antes de adicionar.");
+    await fetch("/programacao/adicionar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigo_cliente: codigo, data_coleta: dia })
+    });
+    modalAdicionar.hide();
+    await carregarSemana();
+}
+
+// ── GERAR PROGRAMAÇÃO ──────────────────────────────────────
 
 async function gerarProgramacao() {
     const msg = document.getElementById("msgGerar");
@@ -178,6 +484,8 @@ async function gerarProgramacao() {
     msg.textContent = `✅ ${data.gerados} clientes programados`;
     await carregarSemana();
 }
+
+// ── UPLOAD ─────────────────────────────────────────────────
 
 document.getElementById("formUpload").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -191,9 +499,6 @@ document.getElementById("formUpload").addEventListener("submit", async (e) => {
     const data = await res.json();
     msg.textContent = `✅ ${data.importados} importados, ${data.atualizados} atualizados`;
 });
-
-// Carrega a semana automaticamente ao abrir a página
-carregarSemana();
 </script>
 
 </body>

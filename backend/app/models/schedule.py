@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date
+from sqlalchemy import Column, Integer, String, Date, Boolean
 from backend.app.database import Base
 
 
@@ -12,3 +12,4 @@ class Schedule(Base):
     data_coleta = Column(Date, nullable=True)
     dia_semana = Column(String, nullable=True)
     status = Column(String, default="Programado")
+    fixo = Column(Boolean, default=False)
