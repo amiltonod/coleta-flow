@@ -35,12 +35,14 @@ DIAS_SEMANA = {
 async def home(request: Request, db: Session = Depends(get_db)):
     clientes = db.query(Client).all()
     schedules = db.query(Schedule).all()
+    fixos = db.query(Client).filter(Client.fixo == True).all()
     return templates.TemplateResponse(
         name="index.html",
         request=request,
         context={
             "clientes": clientes,
             "schedules": schedules,
+            "fixos": fixos,
         }
     )
 
@@ -199,7 +201,7 @@ async def fixar_cliente(
     cliente.dia_fixo = dados.get("dia_fixo", None)
 
     db.commit()
-    return {"mensagem": "Cliente updated com sucesso"}
+    return {"mensagem": "Cliente atualizado com sucesso"}
 
 
 @router.get("/clientes/buscar")
