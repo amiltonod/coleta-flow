@@ -38,6 +38,7 @@ def gerar_programacao(db: Session) -> dict:
     Gera a programação da semana seguinte.
     Clientes fixos vão pro dia fixo.
     Clientes normais usam ultima_coleta + frequencia_dias.
+    NÃO DUPLICA se já existir coleta pro cliente no mesmo dia.
     """
     clientes = db.query(Client).all()
 
@@ -74,6 +75,20 @@ def gerar_programacao(db: Session) -> dict:
             ignorados += 1
             continue
 
+        # ------------------------------------------------------------
+        # TRAVA CONTRA DUPLICIDADE: Verifica se já existe agendamento
+        # para este cliente na data calculada
+        # ------------------------------------------------------------
+        existe = db.query(Schedule).filter(
+            Schedule.codigo_cliente == cliente.codigo,
+            Schedule.data_coleta == data_coleta
+        ).first()
+
+        if existe:
+            ignorados += 1
+            continue  # Pula para o próximo cliente sem duplicar registro
+
+        # Se passou pela trava, cria a nova coleta normalmente
         schedule = Schedule(
             cliente=cliente.nome,
             codigo_cliente=cliente.codigo,
@@ -92,5 +107,5 @@ def gerar_programacao(db: Session) -> dict:
     return {
         "gerados": gerados,
         "ignorados": ignorados,
-        "mensagem": "Programação criada com sucesso!"
+        "mensagem": "Programação processada com sucesso!"
     }

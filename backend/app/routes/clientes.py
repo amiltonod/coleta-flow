@@ -101,6 +101,7 @@ async def programacao_semana(db: Session = Depends(get_db)):
         "programacao": resultado,
     }
 
+
 @router.put("/programacao/{schedule_id}")
 async def atualizar_schedule(
     schedule_id: int,
@@ -140,6 +141,46 @@ async def deletar_schedule(
     db.commit()
     return {"mensagem": "Agendamento removido com sucesso"}
 
+
+@router.post("/programacao/{schedule_id}/replicar")
+async def replicar_coleta(
+    schedule_id: int,
+    dados: dict,
+    db: Session = Depends(get_db)
+):
+    """Copia uma coleta para outro dia da semana evitando duplicados."""
+    original = db.query(Schedule).filter(Schedule.id == schedule_id).first()
+    if not original:
+        return {"erro": "Agendamento não encontrado"}
+
+    nova_data = date.fromisoformat(dados["data_coleta"])
+
+    # --- TRAVA CONTRA DUPLICIDADE MANUAL (REPLICAR) ---
+    existe = db.query(Schedule).filter(
+        Schedule.codigo_cliente == original.codigo_cliente,
+        Schedule.data_coleta == nova_data
+    ).first()
+
+    if existe:
+        return {"erro": "O cliente já possui coleta programada nesta nova data."}
+    # --------------------------------------------------
+
+    dia_semana = DIAS_SEMANA.get(nova_data.weekday(), "")
+
+    nova = Schedule(
+        cliente=original.cliente,
+        codigo_cliente=original.codigo_cliente,
+        unidade=original.unidade,
+        data_coleta=nova_data,
+        dia_semana=dia_semana,
+        status="Programado",
+        fixo=False,
+    )
+    db.add(nova)
+    db.commit()
+    return {"mensagem": "Coleta replicada com sucesso"}
+
+
 @router.put("/clientes/{cliente_id}/fixar")
 async def fixar_cliente(
     cliente_id: int,
@@ -158,17 +199,15 @@ async def fixar_cliente(
     cliente.dia_fixo = dados.get("dia_fixo", None)
 
     db.commit()
-    return {"mensagem": "Cliente atualizado com sucesso"}
+    return {"mensagem": "Cliente updated com sucesso"}
+
 
 @router.get("/clientes/buscar")
 async def buscar_clientes(
     q: str = Query(..., min_length=1),
     db: Session = Depends(get_db)
 ):
-    """
-    Busca clientes por código ou nome.
-    O % é o coringa do SQL — busca qualquer texto que contenha q.
-    """
+    """Busca clientes por código ou nome."""
     termo = f"%{q}%"
     clientes = db.query(Client).filter(
         (Client.codigo.ilike(termo)) | (Client.nome.ilike(termo))
@@ -238,7 +277,7 @@ async def adicionar_coleta(
     db: Session = Depends(get_db)
 ):
     """
-    Adiciona uma coleta manualmente na grade.
+    Adiciona uma coleta manualmente na grade prevenindo duplicados.
     Recebe: codigo_cliente, data_coleta
     """
     codigo = dados.get("codigo_cliente")
@@ -252,6 +291,17 @@ async def adicionar_coleta(
         return {"erro": "Cliente não encontrado"}
 
     data_coleta = date.fromisoformat(data_str)
+
+    # --- TRAVA CONTRA DUPLICIDADE MANUAL (ADICIONAR) ---
+    existe = db.query(Schedule).filter(
+        Schedule.codigo_cliente == codigo,
+        Schedule.data_coleta == data_coleta
+    ).first()
+
+    if existe:
+        return {"erro": "Coleta já programada para este cliente nesta data"}
+    # ---------------------------------------------------
+
     dia_semana = DIAS_SEMANA.get(data_coleta.weekday(), "")
 
     schedule = Schedule(

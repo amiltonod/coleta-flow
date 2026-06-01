@@ -35,14 +35,20 @@ def importar_clientes(file_path: str, db: Session) -> dict:
             frequencia_dias = int(row.iloc[3]) if len(row) > 3 and pd.notna(row.iloc[3]) else None
 
             # Datas
-            ultima_coleta = row.iloc[8] if len(row) > 8 and pd.notna(row.iloc[8]) else None
-            proxima_coleta = row.iloc[12] if len(row) > 12 and pd.notna(row.iloc[12]) else None
+            ultima_coleta = None
+            proxima_coleta = None
 
-            # Converte para date se vier como datetime
-            if hasattr(ultima_coleta, 'date'):
-                ultima_coleta = ultima_coleta.date()
-            if hasattr(proxima_coleta, 'date'):
-                proxima_coleta = proxima_coleta.date()
+            if len(row) > 8 and pd.notna(row.iloc[8]):
+                data = pd.to_datetime(row.iloc[8], errors="coerce")
+
+                if pd.notna(data):
+                    ultima_coleta = data.date()
+
+            if len(row) > 12 and pd.notna(row.iloc[12]):
+                data = pd.to_datetime(row.iloc[12], errors="coerce")
+
+                if pd.notna(data):
+                    proxima_coleta = data.date()
 
             # Busca se o cliente já existe pelo código
             cliente_existente = db.query(Client).filter(Client.codigo == codigo).first()

@@ -2,504 +2,384 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>ColetaFlow</title>
+    <title>Almeida Ambiental - Gestão de Coletas</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        @media print {
-            .no-print { display: none !important; }
-            .grade-semana { font-size: 11px; }
+        :root {
+            --verde-escuro: #6B7F3A;
+            --verde-medio: #8FA04A;
+            --verde-claro: #B8C878;
+            --cinza-escuro: #3D3D3D;
+            --cinza-medio: #5A5A5A;
         }
-        .celula-cliente {
-            border: 1px solid #dee2e6;
+
+        body { background: #f5f6f0; font-family: sans-serif; }
+
+        /* Navbar */
+        .navbar-almeida {
+            background: #fff;
+            border-bottom: 4px solid var(--verde-escuro);
+            padding: 10px 20px;
+        }
+        .navbar-almeida .titulo { font-size: 1.1rem; font-weight: 700; color: var(--cinza-escuro); }
+        .navbar-almeida .subtitulo { font-size: 0.7rem; color: var(--cinza-medio); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Grade Semanal Compacta */
+        .col-dia { min-width: 160px; padding: 0 4px !important; }
+        .cabecalho-dia {
+            background: var(--verde-escuro);
+            color: #fff;
             border-radius: 4px;
+            padding: 4px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+        }
+        .corpo-dia { background: rgba(0,0,0,0.02); border-radius: 4px; padding: 2px; }
+        
+        .celula-cliente {
+            border: 1px solid #d4ddb8;
+            border-radius: 3px;
             padding: 4px 6px;
             margin-bottom: 4px;
-            background: #f8f9fa;
-            cursor: grab;
+            background: #fff;
+            font-size: 0.75rem;
             position: relative;
+            line-height: 1.2;
         }
-        .celula-cliente:hover .acoes-card {
-            display: flex;
+        .celula-cliente.fixo { border-left: 3px solid var(--verde-medio); background: #f4f7eb; }
+        .acoes-card { position: absolute; top: 1px; right: 1px; display: none; gap: 3px; }
+        .celula-cliente:hover .acoes-card { display: flex; }
+        .acoes-card button { background: transparent; border: none; cursor: pointer; padding: 0; font-size: 10px; }
+
+        /* Tabela Editável (Banco de Dados) */
+        .card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 15px; overflow: hidden; }
+        .card-header-almeida {
+            background: var(--verde-escuro);
+            color: #fff;
+            font-weight: 600;
+            padding: 8px 12px;
+            font-size: 0.85rem;
         }
-        .acoes-card {
-            display: none;
-            position: absolute;
-            top: 3px;
-            right: 3px;
-            gap: 3px;
+        
+        /* PARTE DE CIMA (Cabeçalho da Tabela) com cor diferente */
+        .table-editavel thead th {
+            background-color: #e2e8d5 !important;
+            color: var(--cinza-escuro);
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 8px 5px;
+            border-bottom: 2px solid var(--verde-medio);
         }
-        .acoes-card button {
-            border: none;
+        
+        /* PARTE DE BAIXO com linhas alternadas (efeito Zebra) */
+        .table-editavel tbody tr:nth-child(even) td {
+            background-color: #f8faf5;
+        }
+        .table-editavel tbody tr:nth-child(odd) td {
+            background-color: #ffffff;
+        }
+
+        /* Código em Negrito menor */
+        .table-editavel strong {
+            font-size: 0.75rem;
+            color: #111;
+            padding-left: 4px;
+        }
+        
+        .table-editavel input, .table-editavel select {
+            width: 100%;
+            border: 1px solid transparent;
             background: transparent;
-            cursor: pointer;
-            font-size: 11px;
-            padding: 1px 3px;
-            border-radius: 3px;
+            padding: 1px 4px;
+            font-size: 0.8rem;
         }
-        .acoes-card button:hover {
-            background: #dee2e6;
-        }
-        .col-dia {
-            min-width: 180px;
-        }
-        .col-dia.dragover-ativo {
-            background: #e7f1ff;
-            border-radius: 8px;
-        }
-        .resultado-busca {
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .resultado-busca .item-busca {
-            padding: 6px 10px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .resultado-busca .item-busca:hover {
-            background: #e7f1ff;
+        .table-editavel input:hover, .table-editavel select:hover { border-color: #ddd; background: #fff; }
+        .table-editavel input:focus, .table-editavel select:focus { border-color: var(--verde-medio); background: #fff; outline: none; }
+
+        /* Botões */
+        .btn-almeida { background: var(--verde-escuro); color: #fff; border: none; transition: all 0.2s; }
+        .btn-almeida:hover { background: var(--verde-medio); color: #fff; transform: translateY(-1px); }
+
+        /* Busca */
+        #listaSugestoes { background: white; border: 1px solid #ddd; }
+        .list-group-item:hover { background-color: #f8faf2; cursor: pointer; }
+
+        /* IMPRESSÃO */
+        @media print {
+            .no-print, .acoes-card, .btn-sm, .modal, .vr, input[type="file"] {
+                display: none !important;
+            }
+            body { background: #fff; padding: 0; margin: 0; }
+            .container-fluid { width: 100%; padding: 10px; }
+            
+            .navbar-almeida { 
+                display: block !important; 
+                border-bottom: 2px solid #000; 
+                margin-bottom: 20px;
+                padding: 0 0 10px 0;
+            }
+            
+            .row { display: flex !important; flex-wrap: nowrap !important; width: 100%; }
+            .col-dia { 
+                flex: 1 0 18% !important; 
+                max-width: 20% !important; 
+                padding: 0 2px !important; 
+            }
+            .cabecalho-dia { 
+                background: #6B7F3A !important; 
+                color: white !important;
+                -webkit-print-color-adjust: exact; 
+                font-size: 9pt;
+            }
+            .celula-cliente { 
+                border: 1px solid #ccc !important; 
+                page-break-inside: avoid; 
+            }
+            .card:last-child { display: none !important; }
         }
     </style>
 </head>
+<body>
 
-<body class="bg-light">
-<div class="container-fluid mt-4 px-4">
-
-    <h1 class="mb-4">🚛 ColetaFlow</h1>
-
-    <!-- Ações -->
-    <div class="row g-3 mb-4 no-print">
-        <div class="col-auto">
-            <div class="card">
-                <div class="card-body py-2">
-                    <h6 class="card-title mb-2">Importar Planilha</h6>
-                    <form id="formUpload" class="d-flex gap-2 align-items-center">
-                        <input type="file" name="file" id="inputFile" class="form-control form-control-sm" accept=".xlsx">
-                        <button type="submit" class="btn btn-primary btn-sm text-nowrap">Enviar</button>
-                    </form>
-                    <small id="msgUpload" class="text-muted"></small>
-                </div>
-            </div>
-        </div>
-        <div class="col-auto">
-            <div class="card">
-                <div class="card-body py-2">
-                    <h6 class="card-title mb-2">Programação</h6>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-success btn-sm" onclick="gerarProgramacao()">Gerar Programação</button>
-                        <button class="btn btn-outline-primary btn-sm" onclick="carregarSemana()">Ver Semana</button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">🖨️ Imprimir</button>
-                    </div>
-                    <small id="msgGerar" class="text-muted"></small>
-                </div>
-            </div>
-        </div>
+<div class="navbar-almeida d-flex align-items-center gap-3">
+    <div>
+        <div class="titulo">Almeida Ambiental</div>
+        <div class="subtitulo">Programação de Coletas — Araquari</div>
     </div>
-
-    <!-- Grade semanal -->
-    <div id="gradeSemana" class="mb-5"></div>
-
-    <!-- Tabela de clientes -->
-    <div class="card mb-4 no-print">
-        <div class="card-body">
-            <h5 class="card-title">Clientes Cadastrados ({{ clientes | length }})</h5>
-            {% if clientes %}
-            <div style="overflow-x:auto">
-            <table class="table table-striped table-sm">
-                <thead>
-                    <tr>
-                        <th>Código</th>
-                        <th>Nome</th>
-                        <th>Cidade</th>
-                        <th>Unidade</th>
-                        <th>Frequência (dias)</th>
-                        <th>Última Coleta</th>
-                        <th>Próxima Coleta</th>
-                        <th>Observação</th>
-                        <th>Fixo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for cliente in clientes %}
-                    <tr>
-                        <td>{{ cliente.codigo }}</td>
-                        <td>{{ cliente.nome }}</td>
-                        <td>{{ cliente.cidade or "—" }}</td>
-                        <td>{{ cliente.unidade or "—" }}</td>
-                        <td>{{ cliente.frequencia_dias or "—" }}</td>
-                        <td>{{ cliente.ultima_coleta or "—" }}</td>
-                        <td>{{ cliente.proxima_coleta or "—" }}</td>
-                        <td>{{ cliente.observacao or "—" }}</td>
-                        <td>{{ "📌 " + cliente.dia_fixo if cliente.fixo else "—" }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            </div>
-            {% else %}
-            <p class="text-muted">Nenhum cliente importado ainda.</p>
-            {% endif %}
-        </div>
-    </div>
-
 </div>
 
-<!-- Modal Editar Cliente -->
-<div class="modal fade" id="modalEditar" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">✏️ Editar Cliente</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<div class="container-fluid mt-3 px-3">
+    
+    <!-- Ações Principais -->
+    <div class="row g-2 mb-3 no-print">
+        <div class="col-auto">
+            <div class="card p-2 d-flex flex-row gap-2 align-items-center mb-0">
+                <input type="file" id="inputFile" class="form-control form-control-sm" style="width: 200px;">
+                <button class="btn btn-almeida btn-sm" onclick="fazerUpload()">Importar</button>
+                <div class="vr"></div>
+                <button class="btn btn-almeida btn-sm" onclick="gerarProgramacao()">Gerar Coletas</button>
+                <button class="btn btn-almeida btn-sm" onclick="abrirModalManual()" style="background-color: var(--verde-medio)">➕ Novo</button>
+                <button class="btn btn-outline-dark btn-sm" onclick="window.print()">🖨️ Imprimir</button>
             </div>
-            <div class="modal-body">
-                <input type="hidden" id="editClienteId">
-                <div class="mb-3">
-                    <label class="form-label">Código</label>
-                    <input type="text" id="editCodigo" class="form-control" disabled>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Nome</label>
-                    <input type="text" id="editNome" class="form-control">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Cidade</label>
-                    <input type="text" id="editCidade" class="form-control">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Unidade</label>
-                    <input type="text" id="editUnidade" class="form-control">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Frequência (dias)</label>
-                    <input type="number" id="editFrequencia" class="form-control">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Observação</label>
-                    <input type="text" id="editObservacao" class="form-control">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button class="btn btn-primary" onclick="salvarEdicaoCliente()">Salvar</button>
+        </div>
+    </div>
+
+    <!-- Grade Semanal -->
+    <div id="gradeSemana"></div>
+
+    <!-- Planilha de Gestão -->
+    <div class="card no-print mt-4">
+        <div class="card-header-almeida">📊 Banco de Dados de Clientes</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-editavel mb-0">
+                    <thead>
+                        <tr>
+                            <th width="70">Cod</th>
+                            <th>Cliente / Fornecedor</th>
+                            <th>Cidade</th>
+                            <th width="80">Freq</th>
+                            <th width="120">Dia Fixo</th>
+                            <th>Obs</th>
+                            <th width="30"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpoTabelaClientes">
+                        {% for c in clientes %}
+                        <tr>
+                            <td class="align-middle"><strong>{{ c.codigo }}</strong></td>
+                            <td><input type="text" value="{{ c.nome }}" onblur="salvarCampo({{ c.id }}, 'nome', this.value)"></td>
+                            <td><input type="text" value="{{ c.cidade or '' }}" onblur="salvarCampo({{ c.id }}, 'cidade', this.value)"></td>
+                            <td><input type="number" value="{{ c.frequencia_dias or '' }}" onblur="salvarCampo({{ c.id }}, 'frequencia_dias', this.value)"></td>
+                            <td>
+                                <select onchange="atualizarDiaFixo({{ c.id }}, this.value)" style="font-weight:bold; color:var(--verde-escuro)">
+                                    <option value="" {% if not c.dia_fixo %}selected{% endif %}>—</option>
+                                    <option value="Segunda" {% if c.dia_fixo == 'Segunda' %}selected{% endif %}>Segunda</option>
+                                    <option value="Terça" {% if c.dia_fixo == 'Terça' %}selected{% endif %}>Terça</option>
+                                    <option value="Quarta" {% if c.dia_fixo == 'Quarta' %}selected{% endif %}>Quarta</option>
+                                    <option value="Quinta" {% if c.dia_fixo == 'Quinta' %}selected{% endif %}>Quinta</option>
+                                    <option value="Sexta" {% if c.dia_fixo == 'Sexta' %}selected{% endif %}>Sexta</option>
+                                </select>
+                            </td>
+                            <td><input type="text" value="{{ c.observacao or '' }}" onblur="salvarCampo({{ c.id }}, 'observacao', this.value)"></td>
+                            <td class="align-middle text-center"><button class="btn btn-sm p-0 text-danger" onclick="excluirCliente({{ c.id }})">🗑️</button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal Adicionar Coleta -->
-<div class="modal fade" id="modalAdicionar" tabindex="-1">
+<!-- Modal Coleta Manual / Auto-Cadastro -->
+<div class="modal fade no-print" id="modalManual" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">➕ Adicionar Coleta</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title">Adicionar Coleta</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="adicionarDia">
-                <div class="mb-3">
-                    <label class="form-label">Buscar cliente (código ou nome)</label>
-                    <input type="text" id="campoBusca" class="form-control" placeholder="Digite para buscar..." oninput="buscarCliente()">
-                    <div id="resultadoBusca" class="resultado-busca mt-1" style="display:none"></div>
+                <div class="mb-2">
+                    <label class="small fw-bold">Data</label>
+                    <select id="manualData" class="form-select form-select-sm"></select>
                 </div>
-                <div id="clienteSelecionado" style="display:none">
-                    <div class="alert alert-success py-2">
-                        <strong id="nomeClienteSelecionado"></strong><br>
-                        <small id="detalhesClienteSelecionado"></small>
-                    </div>
+                <div class="mb-2 position-relative">
+                    <label class="small fw-bold">Buscar (Nome ou Código)</label>
+                    <input type="text" id="manualBusca" class="form-control form-control-sm" oninput="filtrarFornecedores()">
+                    <div id="listaSugestoes" class="list-group position-absolute w-100 shadow" style="z-index: 1050; display: none;"></div>
                 </div>
-                <input type="hidden" id="codigoClienteSelecionado">
+                <div class="mb-2">
+                    <label class="small fw-bold">Código</label>
+                    <input type="text" id="manualCodigo" class="form-control form-control-sm" onblur="verificarCadastroExistente()">
+                </div>
+                <div id="camposCadastroNovo" style="display: none;" class="p-2 border rounded bg-light">
+                    <input type="text" id="manualNome" class="form-control form-control-sm mb-1" placeholder="Nome">
+                    <input type="text" id="manualCidade" class="form-control form-control-sm mb-1" placeholder="Cidade">
+                    <input type="number" id="manualFrequencia" class="form-control form-control-sm" placeholder="Freq. Dias">
+                </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button class="btn btn-success" onclick="confirmarAdicao()">Adicionar</button>
+            <div class="modal-footer py-1">
+                <button class="btn btn-almeida btn-sm w-100" onclick="salvarColetaManual()">Salvar</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Replicar -->
+<div class="modal fade no-print" id="modalReplicar" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2"><h6>Replicar</h6></div>
+            <div class="modal-body">
+                <input type="hidden" id="replicarCodigo">
+                <select id="replicarNovoDia" class="form-select form-select-sm"></select>
+            </div>
+            <div class="modal-footer p-1"><button class="btn btn-almeida btn-sm w-100" onclick="confirmarReplicacao()">Copiar</button></div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-const DIAS_NOMES = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
-let dragId = null;
-let modalEditar = null;
-let modalAdicionar = null;
+const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+let datasSemana = [];
+let modMan, modRep;
 
 document.addEventListener("DOMContentLoaded", () => {
-    modalEditar = new bootstrap.Modal(document.getElementById("modalEditar"));
-    modalAdicionar = new bootstrap.Modal(document.getElementById("modalAdicionar"));
+    modMan = new bootstrap.Modal(document.getElementById('modalManual'));
+    modRep = new bootstrap.Modal(document.getElementById('modalReplicar'));
     carregarSemana();
 });
-
-function formatarData(iso) {
-    const [ano, mes, dia] = iso.split("-");
-    return `${dia}/${mes}`;
-}
 
 async function carregarSemana() {
     const res = await fetch("/programacao-semana");
     const data = await res.json();
-    renderizarGrade(data);
+    datasSemana = data.dias;
+    renderGrade(data);
 }
 
-function renderizarGrade(data) {
+function renderGrade(data) {
     const container = document.getElementById("gradeSemana");
-    let html = `
-        <div class="card grade-semana">
-            <div class="card-body">
-                <h5 class="card-title mb-3">📅 Programação da Semana</h5>
-                <div class="row g-2">
-    `;
-
+    let html = `<div class="row g-1">`;
     data.dias.forEach((dia, i) => {
-        const clientes = data.programacao[dia] || [];
-        html += `
-            <div class="col col-dia"
-                id="col-${dia}"
-                ondragover="allowDrop(event, '${dia}')"
-                ondragleave="dragLeave(event, '${dia}')"
-                ondrop="drop(event, '${dia}')"
-                data-dia="${dia}">
-                <div class="fw-bold text-center bg-primary text-white rounded py-1 mb-2">
-                    ${DIAS_NOMES[i]}<br>
-                    <small>${formatarData(dia)}</small>
+        html += `<div class="col col-dia">
+            <div class="cabecalho-dia">${DIAS[i]}<br>${dia.split('-').reverse().slice(0,2).join('/')}</div>
+            <div class="corpo-dia" ondragover="event.preventDefault()" ondrop="drop(event, '${dia}')">`;
+        (data.programacao[dia] || []).forEach(c => {
+            html += `<div class="celula-cliente ${c.fixo?'fixo':''}" draggable="true" ondragstart="event.dataTransfer.setData('text', ${c.id})">
+                ${c.fixo?'📌 ':''}<strong>${c.codigo}</strong> - ${c.cliente}
+                <div class="acoes-card no-print">
+                    <button onclick="abrirReplicar('${c.codigo}')">🔁</button>
+                    <button onclick="excluirColeta(${c.id})">❌</button>
                 </div>
-                <button class="btn btn-outline-success btn-sm w-100 mb-2 no-print"
-                    onclick="abrirAdicionar('${dia}')">➕ Adicionar</button>
-        `;
-
-        clientes.forEach(c => {
-            const texto = `${c.codigo} - ${c.cliente}${c.unidade ? " - " + c.unidade : ""}`;
-            const fixoClass = c.fixo ? "border-warning bg-warning bg-opacity-10" : "";
-            const pinIcon = c.fixo ? "📌" : "📍";
-
-            html += `
-                <div class="celula-cliente ${fixoClass}"
-                    draggable="true"
-                    data-id="${c.id}"
-                    ondragstart="dragStart(event, ${c.id})">
-                    ${texto}
-                    <div class="acoes-card no-print">
-                        <button onclick="toggleFixo(${c.id}, '${c.codigo}', ${c.fixo}, '${dia}')" title="${c.fixo ? 'Desfixar' : 'Fixar'}">${pinIcon}</button>
-                        <button onclick="abrirEditar('${c.codigo}')" title="Editar">✏️</button>
-                        <button onclick="excluirColeta(${c.id})" title="Excluir">🗑️</button>
-                    </div>
-                </div>
-            `;
+            </div>`;
         });
-
-        if (clientes.length === 0) {
-            html += `<div class="text-muted small text-center">—</div>`;
-        }
-        html += `</div>`;
+        html += `</div></div>`;
     });
-
-    html += `</div></div></div>`;
-    container.innerHTML = html;
+    container.innerHTML = html + `</div>`;
 }
 
-// ── DRAG AND DROP ──────────────────────────────────────────
-
-function dragStart(event, id) {
-    dragId = id;
-    event.dataTransfer.effectAllowed = "move";
+async function filtrarFornecedores() {
+    const q = document.getElementById("manualBusca").value;
+    const lista = document.getElementById("listaSugestoes");
+    if(q.length < 2) return lista.style.display = "none";
+    const res = await fetch(`/clientes/buscar?q=${encodeURIComponent(q)}`);
+    const itens = await res.json();
+    lista.innerHTML = itens.map(i => `<button class="list-group-item list-group-item-action py-1 small" onclick="selecionarBusca('${i.codigo}','${i.nome}')">${i.codigo} | ${i.nome}</button>`).join("");
+    lista.style.display = "block";
 }
-
-function allowDrop(event, dia) {
-    event.preventDefault();
-    document.getElementById(`col-${dia}`).classList.add("dragover-ativo");
+function selecionarBusca(c, n) {
+    document.getElementById("manualCodigo").value = c;
+    document.getElementById("manualBusca").value = n;
+    document.getElementById("listaSugestoes").style.display = "none";
+    verificarCadastroExistente();
 }
-
-function dragLeave(event, dia) {
-    document.getElementById(`col-${dia}`).classList.remove("dragover-ativo");
+async function verificarCadastroExistente() {
+    const cod = document.getElementById("manualCodigo").value;
+    const res = await fetch(`/clientes/buscar?q=${cod}`);
+    const data = await res.json();
+    const existe = data.find(x => String(x.codigo) === String(cod));
+    document.getElementById("camposCadastroNovo").style.display = existe ? "none" : "block";
 }
-
-async function drop(event, novaDia) {
-    event.preventDefault();
-    document.getElementById(`col-${novaDia}`).classList.remove("dragover-ativo");
-    if (!dragId) return;
-    await fetch(`/programacao/${dragId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data_coleta: novaDia })
-    });
-    dragId = null;
-    await carregarSemana();
+function abrirModalManual() {
+    document.getElementById("manualData").innerHTML = datasSemana.map((d,i)=>`<option value="${d}">${DIAS[i]}</option>`).join("");
+    modMan.show();
 }
-
-// ── PIN / FIXAR ────────────────────────────────────────────
-
-async function toggleFixo(scheduleId, codigo, estaFixo, dia) {
-    if (estaFixo) {
-        if (!confirm("Tem certeza que deseja remover o pin? Esta coleta não será mais fixa nas próximas semanas.")) return;
-
-        const res = await fetch(`/clientes/buscar?q=${codigo}`);
-        const lista = await res.json();
-        const cliente = lista.find(c => c.codigo === codigo);
-        if (!cliente) return;
-
-        await fetch(`/clientes/${cliente.id}/fixar`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fixo: false, dia_fixo: null })
-        });
-
-    } else {
-        // Pega o nome do dia a partir da data
-        const diaSemanaIndex = new Date(dia + "T00:00:00").getDay();
-        // getDay(): 0=Dom,1=Seg,2=Ter,3=Qua,4=Qui,5=Sex
-        const nomeDia = DIAS_NOMES[diaSemanaIndex - 1];
-
-        if (!confirm(`Tem certeza que deseja fixar esta coleta toda semana na ${nomeDia}?`)) return;
-
-        const res = await fetch(`/clientes/buscar?q=${codigo}`);
-        const lista = await res.json();
-        const cliente = lista.find(c => c.codigo === codigo);
-        if (!cliente) return;
-
-        await fetch(`/clientes/${cliente.id}/fixar`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fixo: true, dia_fixo: nomeDia })
+async function salvarColetaManual() {
+    const cod = document.getElementById("manualCodigo").value;
+    const dia = document.getElementById("manualData").value;
+    if(document.getElementById("camposCadastroNovo").style.display === "block") {
+        await fetch("/clientes/adicionar", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+                codigo: cod, nome: document.getElementById("manualNome").value,
+                cidade: document.getElementById("manualCidade").value, frequencia_dias: document.getElementById("manualFrequencia").value
+            })
         });
     }
-
-    await carregarSemana();
-}
-
-// ── EDITAR CLIENTE ─────────────────────────────────────────
-
-async function abrirEditar(codigo) {
-    const res = await fetch(`/clientes/buscar?q=${codigo}`);
-    const lista = await res.json();
-    const cliente = lista.find(c => c.codigo === codigo);
-    if (!cliente) return alert("Cliente não encontrado");
-
-    document.getElementById("editClienteId").value = cliente.id;
-    document.getElementById("editCodigo").value = cliente.codigo;
-    document.getElementById("editNome").value = cliente.nome;
-    document.getElementById("editCidade").value = cliente.cidade;
-    document.getElementById("editUnidade").value = cliente.unidade;
-    document.getElementById("editFrequencia").value = cliente.frequencia_dias || "";
-    document.getElementById("editObservacao").value = "";
-
-    modalEditar.show();
-}
-
-async function salvarEdicaoCliente() {
-    const id = document.getElementById("editClienteId").value;
-    await fetch(`/clientes/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            nome: document.getElementById("editNome").value,
-            cidade: document.getElementById("editCidade").value,
-            unidade: document.getElementById("editUnidade").value,
-            frequencia_dias: parseInt(document.getElementById("editFrequencia").value) || null,
-            observacao: document.getElementById("editObservacao").value,
-        })
-    });
-    modalEditar.hide();
-    await carregarSemana();
-}
-
-// ── EXCLUIR COLETA ─────────────────────────────────────────
-
-async function excluirColeta(id) {
-    if (!confirm("Remover esta coleta da programação?")) return;
-    await fetch(`/programacao/${id}`, { method: "DELETE" });
-    await carregarSemana();
-}
-
-// ── ADICIONAR COLETA ───────────────────────────────────────
-
-function abrirAdicionar(dia) {
-    document.getElementById("adicionarDia").value = dia;
-    document.getElementById("campoBusca").value = "";
-    document.getElementById("resultadoBusca").style.display = "none";
-    document.getElementById("clienteSelecionado").style.display = "none";
-    document.getElementById("codigoClienteSelecionado").value = "";
-    modalAdicionar.show();
-}
-
-let buscaTimeout = null;
-
-async function buscarCliente() {
-    const q = document.getElementById("campoBusca").value.trim();
-    const resultado = document.getElementById("resultadoBusca");
-
-    if (q.length < 2) {
-        resultado.style.display = "none";
-        return;
-    }
-
-    clearTimeout(buscaTimeout);
-    buscaTimeout = setTimeout(async () => {
-        const res = await fetch(`/clientes/buscar?q=${encodeURIComponent(q)}`);
-        const lista = await res.json();
-
-        if (lista.length === 0) {
-            resultado.innerHTML = `<div class="item-busca text-muted">Nenhum cliente encontrado</div>`;
-        } else {
-            resultado.innerHTML = lista.map(c => `
-                <div class="item-busca" onclick="selecionarCliente('${c.codigo}', '${c.nome}', '${c.unidade}')">
-                    <strong>${c.codigo}</strong> — ${c.nome} ${c.unidade ? "- " + c.unidade : ""}
-                </div>
-            `).join("");
-        }
-        resultado.style.display = "block";
-    }, 300);
-}
-
-function selecionarCliente(codigo, nome, unidade) {
-    document.getElementById("codigoClienteSelecionado").value = codigo;
-    document.getElementById("nomeClienteSelecionado").textContent = `${codigo} — ${nome}`;
-    document.getElementById("detalhesClienteSelecionado").textContent = unidade || "";
-    document.getElementById("clienteSelecionado").style.display = "block";
-    document.getElementById("resultadoBusca").style.display = "none";
-    document.getElementById("campoBusca").value = `${codigo} — ${nome}`;
-}
-
-async function confirmarAdicao() {
-    const codigo = document.getElementById("codigoClienteSelecionado").value;
-    const dia = document.getElementById("adicionarDia").value;
-    if (!codigo) return alert("Selecione um cliente antes de adicionar.");
     await fetch("/programacao/adicionar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigo_cliente: codigo, data_coleta: dia })
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ codigo_cliente: cod, data_coleta: dia })
     });
-    modalAdicionar.hide();
-    await carregarSemana();
+    modMan.hide(); carregarSemana();
 }
-
-// ── GERAR PROGRAMAÇÃO ──────────────────────────────────────
-
-async function gerarProgramacao() {
-    const msg = document.getElementById("msgGerar");
-    msg.textContent = "Gerando...";
-    const res = await fetch("/gerar-programacao", { method: "POST" });
-    const data = await res.json();
-    msg.textContent = `✅ ${data.gerados} clientes programados`;
-    await carregarSemana();
+function abrirReplicar(cod) {
+    document.getElementById("replicarCodigo").value = cod;
+    document.getElementById("replicarNovoDia").innerHTML = datasSemana.map((d,i)=>`<option value="${d}">${DIAS[i]}</option>`).join("");
+    modRep.show();
 }
-
-// ── UPLOAD ─────────────────────────────────────────────────
-
-document.getElementById("formUpload").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const msg = document.getElementById("msgUpload");
-    const file = document.getElementById("inputFile").files[0];
-    if (!file) return;
-    const form = new FormData();
-    form.append("file", file);
-    msg.textContent = "Importando...";
-    const res = await fetch("/upload", { method: "POST", body: form });
-    const data = await res.json();
-    msg.textContent = `✅ ${data.importados} importados, ${data.atualizados} atualizados`;
-});
+async function confirmarReplicacao() {
+    await fetch("/programacao/adicionar", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ codigo_cliente: document.getElementById("replicarCodigo").value, data_coleta: document.getElementById("replicarNovoDia").value })
+    });
+    modRep.hide(); carregarSemana();
+}
+async function drop(e, dia) {
+    const id = e.dataTransfer.getData("text");
+    await fetch(`/programacao/${id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ data_coleta: dia }) });
+    carregarSemana();
+}
+async function salvarCampo(id, f, v) {
+    let b = {}; b[f] = v;
+    await fetch(`/clientes/${id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(b) });
+}
+async function atualizarDiaFixo(id, v) {
+    await fetch(`/clientes/${id}/fixar`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ fixo: !!v, dia_fixo: v||null }) });
+    carregarSemana();
+}
+async function gerarProgramacao() { await fetch("/gerar-programacao", {method:"POST"}); location.reload(); }
+async function fazerUpload() {
+    const f = document.getElementById("inputFile").files[0]; if(!f) return;
+    const fd = new FormData(); fd.append("file", f);
+    await fetch("/upload", {method:"POST", body:fd}); location.reload();
+}
+async function excluirColeta(id) { if(confirm("Remover?")) { await fetch(`/programacao/${id}`, {method:"DELETE"}); carregarSemana(); } }
+async function excluirCliente(id) { if(confirm("Excluir do banco?")) { await fetch(`/clientes/${id}`, {method:"DELETE"}); location.reload(); } }
 </script>
-
 </body>
 </html>
