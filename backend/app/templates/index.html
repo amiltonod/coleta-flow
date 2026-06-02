@@ -500,7 +500,7 @@ function atualizarAgendaNaTabela(data) {
     // Cria um mapa: { "CODIGO_DO_CLIENTE": ["Segunda", "Quarta"] }
     let mapaAgenda = {};
     
-    data.dias.forEach((dia, index) => {
+    data.dias.forEach((dia, index) => { 
         const coletasDoDia = data.programacao[dia] || [];
         coletasDoDia.forEach(coleta => {
             if (!mapaAgenda[coleta.codigo]) {
