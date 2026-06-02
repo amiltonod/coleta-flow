@@ -219,7 +219,15 @@
         }
         .table tbody td { padding: 5px 12px; vertical-align: middle; border-color: var(--borda-suave); }
 
-        .freq-input { width: 55px; border: 1px solid transparent; background: transparent; text-align: center; }
+        /* Atualize na sua tag <style> */
+        .freq-input { 
+            width: 100% !important; /* Garante que o input ocupe todo o espaço da célula */
+            min-width: 40px;
+            border: 1px solid #CED4DA; 
+            background: #fff; 
+            text-align: center; 
+            padding: 2px;
+        }
         .freq-input:focus { border-color: var(--verde-medio); background: #fff; outline: none; border-radius: 4px; }
         
         .input-inline {
