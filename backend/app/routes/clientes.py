@@ -65,6 +65,7 @@ async def upload_file(
     }
 
 
+
 @router.post("/gerar-programacao")
 async def gerar(db: Session = Depends(get_db)):
     resultado = gerar_programacao(db)
@@ -253,7 +254,6 @@ async def atualizar_cliente(
     dados: dict,
     db: Session = Depends(get_db)
 ):
-    """Atualiza o cadastro do cliente."""
     cliente = db.query(Client).filter(Client.id == cliente_id).first()
     if not cliente:
         return {"erro": "Cliente não encontrado"}
@@ -268,6 +268,12 @@ async def atualizar_cliente(
         cliente.frequencia_dias = dados["frequencia_dias"]
     if "observacao" in dados:
         cliente.observacao = dados["observacao"]
+
+    if "ultima_coleta" in dados:
+        if dados["ultima_coleta"]:
+            cliente.ultima_coleta = date.fromisoformat(dados["ultima_coleta"])
+        else:
+            cliente.ultima_coleta = None
 
     db.commit()
     return {"mensagem": "Cliente atualizado com sucesso"}
