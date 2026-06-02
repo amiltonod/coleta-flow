@@ -219,15 +219,7 @@
         }
         .table tbody td { padding: 5px 12px; vertical-align: middle; border-color: var(--borda-suave); }
 
-        /* Atualize na sua tag <style> */
-        .freq-input { 
-            width: 100% !important; /* Garante que o input ocupe todo o espaço da célula */
-            min-width: 40px;
-            border: 1px solid #CED4DA; 
-            background: #fff; 
-            text-align: center; 
-            padding: 2px;
-        }
+        .freq-input { width: 55px; border: 1px solid transparent; background: transparent; text-align: center; }
         .freq-input:focus { border-color: var(--verde-medio); background: #fff; outline: none; border-radius: 4px; }
         
         .input-inline {
@@ -239,18 +231,6 @@
             transition: background-color 0.4s ease, border-color 0.2s ease;
         }
         .input-inline:focus { border-color: var(--verde-medio); background: #fff; outline: none; border-radius: 4px; }
-        
-        /* Badges de Programação Semana na Tabela */
-        .badge-programacao {
-            font-size: 0.65rem;
-            background-color: #E2E8F0;
-            color: #4A5568;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: 600;
-            margin-right: 2px;
-            display: inline-block;
-        }
         
         /* Feedback visual */
         .salvo-sucesso { background-color: #D1E7DD !important; color: #0F5132; }
@@ -277,7 +257,6 @@
 
 <div class="page-wrapper">
 
-    <!-- HEADER CLEAN -->
     <div class="header">
         <div class="header-title">
             <div class="titulo-principal">Programação de Coleta</div>
@@ -285,10 +264,8 @@
         </div>
     </div>
 
-    <!-- CONTEÚDO -->
     <div class="content">
 
-        <!-- Barra de Ações -->
         <div class="action-bar no-print">
             <div class="action-card d-flex align-items-center gap-2">
                 <input type="file" id="inputFile" class="form-control form-control-sm" style="width: 180px; font-size: 0.75rem;">
@@ -300,13 +277,11 @@
             </div>
         </div>
 
-        <!-- Grade de Coletas -->
         <div class="grade-card">
             <div class="grade-header">📅 Coletas Programadas para a Semana</div>
             <div class="grade-body" id="gradeSemana"></div>
         </div>
 
-        <!-- Banco de Dados Otimizado -->
         <div class="section-card no-print">
             <div class="section-header">📊 Banco de Dados de Clientes</div>
             <div class="table-responsive">
@@ -316,17 +291,16 @@
                             <th width="60">Cod</th>
                             <th>Cliente / Fornecedor</th>
                             <th>Cidade</th>
-                            <th width="50" class="text-center">Freq</th>
-                            <th width="110">Dia Fixo</th>
-                            <th width="140">Última Coleta</th>
-                            <th width="180">Programação (Esta Semana)</th>
+                            <th width="65" class="text-center">Freq</th>
+                            <th width="115">Dia Fixo</th>
+                            <th width="115">Última Coleta</th>
                             <th>Obs</th>
                             <th width="30"></th>
                         </tr>
                     </thead>
                     <tbody id="corpoTabelaClientes">
                         {% for c in clientes %}
-                        <tr data-client-code="{{ c.codigo }}">
+                        <tr>
                             <td><strong>{{ c.codigo }}</strong></td>
                             <td><input type="text" class="input-inline" value="{{ c.nome }}" onblur="salvarCampo({{ c.id }}, 'nome', this)"></td>
                             <td><input type="text" class="input-inline" value="{{ c.cidade or '' }}" onblur="salvarCampo({{ c.id }}, 'cidade', this)"></td>
@@ -342,12 +316,7 @@
                                 </select>
                             </td>
                             <td>
-                                <!-- INPUT DATE NATIVO: Garante salvamento no formato AAAA-MM-DD sem quebras -->
-                                <input type="date" class="form-control form-control-sm py-0 input-inline" value="{{ c.ultima_coleta or '' }}" onchange="salvarCampo({{ c.id }}, 'ultima_coleta', this)">
-                            </td>
-                            <!-- NOVA COLUNA DE VISUALIZAÇÃO DA PROGRAMAÇÃO -->
-                            <td class="coluna-agenda-semana text-muted" style="font-size: 0.7rem;">
-                                <span class="text-light-emphasis">—</span>
+                                <input type="text" class="input-inline data-coleta-input" style="font-weight: 500;" value="{{ c.ultima_coleta or '' }}" placeholder="dd/mm/aaaa" onblur="processarDataExibicao(this, {{ c.id }})">
                             </td>
                             <td><input type="text" class="input-inline" value="{{ c.observacao or '' }}" onblur="salvarCampo({{ c.id }}, 'observacao', this)"></td>
                             <td class="text-center">
@@ -363,7 +332,6 @@
     </div>
 </div>
 
-<!-- MODAL ADICIONAR MANUAL -->
 <div class="modal fade no-print" id="modalManual" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
@@ -424,7 +392,6 @@
     </div>
 </div>
 
-<!-- MODAL COPIAR -->
 <div class="modal fade no-print" id="modalReplicar" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
@@ -455,10 +422,58 @@ document.addEventListener("DOMContentLoaded", () => {
         modMan = new bootstrap.Modal(document.getElementById('modalManual'));
         modRep = new bootstrap.Modal(document.getElementById('modalReplicar'));
     } catch (err) {
-        console.error("Erro ao carregar os modais Bootstrap:", err);
+        console.error("Erro ao inicializar componentes Bootstrap:", err);
     }
     carregarSemana();
+    formatarDatasIniciais();
 });
+
+function formatarDatasIniciais() {
+    document.querySelectorAll('.data-coleta-input').forEach(input => {
+        let v = input.value.trim();
+        if (v && v.includes('-')) {
+            const parts = v.split('-');
+            if (parts.length === 3) {
+                input.value = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+        }
+    });
+}
+
+// CORREÇÃO E FORMATADOR DA DATA BRASILEIRA COM SALVAMENTO CONVERTIDO
+async function processarDataExibicao(input, id) {
+    let v = input.value.trim();
+    if (!v) {
+        await salvarCampo(id, 'ultima_coleta', input, '');
+        return;
+    }
+    
+    let nums = v.replace(/\D/g, '');
+    if (nums.length >= 4) {
+        let dia = nums.substring(0, 2).padStart(2, '0');
+        let mes = nums.substring(2, 4).padStart(2, '0');
+        let ano = '2026';
+        
+        if (nums.length === 4) { ano = '2026'; } 
+        else if (nums.length === 6) { ano = '20' + nums.substring(4, 6); } 
+        else if (nums.length >= 8) { ano = nums.substring(4, 8); }
+        
+        if (parseInt(dia) > 31) dia = '31';
+        if (parseInt(mes) > 12) mes = '12';
+        
+        const exibicaoBR = `${dia}/${mes}/${ano}`;
+        const formatoBanco = `${ano}-${mes}-${dia}`;
+        
+        // Deixa visível em formato brasileiro para o usuário
+        input.value = exibicaoBR;
+        
+        // Dispara o salvamento enviando a conversão aceita pelo Python SQL
+        await salvarCampo(id, 'ultima_coleta', input, formatoBanco);
+    } else {
+        input.classList.add("salvo-erro");
+        setTimeout(() => input.classList.remove("salvo-erro"), 1000);
+    }
+}
 
 async function carregarSemana() {
     try {
@@ -466,9 +481,8 @@ async function carregarSemana() {
         const data = await res.json();
         datasSemana = data.dias;
         renderGrade(data);
-        atualizarAgendaNaTabela(data); // Preenche a nova coluna do banco de dados de clientes
     } catch(e) {
-        console.error("Erro ao carregar a semana de coletas:", e);
+        console.error("Erro ao carregar dados da semana:", e);
     }
 }
 
@@ -493,64 +507,6 @@ function renderGrade(data) {
         html += `</div></div>`;
     });
     container.innerHTML = html + `</div>`;
-}
-
-// MAPEIA AS COLETAS DA GRADE DIRETAMENTE PARA DENTRO DA LINHA DO CLIENTE NA TABELA
-function atualizarAgendaNaTabela(data) {
-    // Cria um mapa: { "CODIGO_DO_CLIENTE": ["Segunda", "Quarta"] }
-    let mapaAgenda = {};
-    
-    data.dias.forEach((dia, index) => { 
-        const coletasDoDia = data.programacao[dia] || [];
-        coletasDoDia.forEach(coleta => {
-            if (!mapaAgenda[coleta.codigo]) {
-                mapaAgenda[coleta.codigo] = [];
-            }
-            if (!mapaAgenda[coleta.codigo].includes(DIAS[index])) {
-                mapaAgenda[coleta.codigo].push(DIAS[index]);
-            }
-        });
-    });
-
-    // Limpa e reinsere os dados na tabela do banco de dados inferior
-    document.querySelectorAll("#corpoTabelaClientes tr").forEach(tr => {
-        const cod = tr.getAttribute("data-client-code");
-        const tdAgenda = tr.querySelector(".coluna-agenda-semana");
-        
-        if (tdAgenda) {
-            if (mapaAgenda[cod] && mapaAgenda[cod].length > 0) {
-                tdAgenda.innerHTML = mapaAgenda[cod].map(dia => `<span class="badge-programacao">${dia}</span>`).join("");
-            } else {
-                tdAgenda.innerHTML = `<span class="text-muted" style="opacity:0.4;">—</span>`;
-            }
-        }
-    });
-}
-
-// SALVAR CAMPOS DA TABELA (NOME, CIDADE, FREQ, OBS E DATA DO CALENDÁRIO)
-async function salvarCampo(id, nomeCampo, inputElement) {
-    let valor = inputElement.value;
-    let b = {}; 
-    b[nomeCampo] = valor ? valor : null;
-    
-    try {
-        const res = await fetch(`/clientes/${id}`, { 
-            method: "PUT", 
-            headers: {"Content-Type":"application/json"}, 
-            body: JSON.stringify(b) 
-        });
-        
-        if(res.ok) {
-            inputElement.classList.add("salvo-sucesso");
-            setTimeout(() => inputElement.classList.remove("salvo-sucesso"), 1000);
-        } else {
-            inputElement.classList.add("salvo-erro");
-            setTimeout(() => inputElement.classList.remove("salvo-erro"), 1000);
-        }
-    } catch(e) {
-        inputElement.classList.add("salvo-erro");
-        setTimeout(() => inputElement.classList.remove("salvo-erro"), 1000);
-    }
 }
 
 function alternarModoCadastro(modo) {
@@ -649,6 +605,30 @@ async function salvarColetaManual() {
     }
 }
 
+// SALVAR EDICÕES DIRETAS NA TABELA
+async function salvarCampo(id, nomeCampo, inputElement, valorCustomizado = undefined) {
+    let valor = valorCustomizado !== undefined ? valorCustomizado : inputElement.value;
+    let b = {}; 
+    b[nomeCampo] = valor;
+    
+    try {
+        const res = await fetch(`/clientes/${id}`, { 
+            method: "PUT", 
+            headers: {"Content-Type":"application/json"}, 
+            body: JSON.stringify(b) 
+        });
+        
+        if(res.ok) {
+            inputElement.classList.add("salvo-sucesso");
+            setTimeout(() => inputElement.classList.remove("salvo-sucesso"), 1000);
+        } else {
+            inputElement.classList.add("salvo-erro");
+        }
+    } catch(e) {
+        inputElement.classList.add("salvo-erro");
+    }
+}
+
 function abrirReplicar(cod) {
     document.getElementById("replicarCodigo").value = cod;
     document.getElementById("replicarNovoDia").innerHTML = datasSemana.map((d,i)=>`<option value="${d}">${DIAS[i]}</option>`).join("");
@@ -664,6 +644,7 @@ async function confirmarReplicacao() {
     carregarSemana();
 }
 
+// FUNÇÃO DRAG AND DROP CORRIGIDA PARA ATUALIZAR E SALVAR NO SISTEMA IMEDIATAMENTE
 async function drop(e, dia) {
     e.preventDefault();
     const id = e.dataTransfer.getData("text");
@@ -676,7 +657,9 @@ async function drop(e, dia) {
             body: JSON.stringify({ data_coleta: dia }) 
         });
         if(res.ok) {
-            carregarSemana(); 
+            carregarSemana(); // Recarrega a grade com a alteração salva no banco
+        } else {
+            alert("Erro ao salvar nova posição do box no servidor.");
         }
     } catch(err) {
         console.error("Falha ao mover box:", err);
@@ -691,7 +674,11 @@ async function atualizarDiaFixo(id, v) {
 async function gerarProgramacao() { 
     try {
         const res = await fetch("/gerar-programacao", {method:"POST"}); 
-        if(res.ok) location.reload();
+        if(res.ok) {
+            location.reload(); 
+        } else {
+            alert("Erro ao processar a geração automática das coletas.");
+        }
     } catch(e) {
         alert("Erro de comunicação com o servidor.");
     }
@@ -710,7 +697,7 @@ async function fazerUpload() {
 async function excluirColeta(id) { 
     if(confirm("Remover esta coleta da semana?")) { 
         const res = await fetch(`/programacao/${id}`, {method:"DELETE"}); 
-        if(res.ok) { carregarSemana(); }
+        if(res.ok) { carregarSemana(); } else { alert("Erro ao remover coleta no servidor."); }
     } 
 }
 
@@ -719,7 +706,7 @@ async function excluirCliente(id, event) {
     if(confirm("Excluir este cliente definitivamente do Banco de Dados?")) { 
         const res = await fetch(`/clientes/${id}`, {method:"DELETE"}); 
         if(res.ok) { location.reload(); } 
-        else { alert("Não foi possível excluir. Verifique se existem coletas ativas na semana."); }
+        else { alert("Não foi possível excluir. Motivo: Verifique se este cliente possui coletas ativas registradas na grade."); }
     } 
 }
 </script>
