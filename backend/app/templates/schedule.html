@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Programação de Coletas</title>
+</head>
+
+<body>
+
+    <h1>Programação Automática</h1>
+
+    <table border="1" cellpadding="5">
+
+        <tr>
+            <th>Código</th>
+            <th>Cliente</th>
+            <th>Frequência</th>
+            <th>Última Coleta</th>
+            <th>Próxima Coleta</th>
+        </tr>
+
+        {% for cliente in clientes %}
+
+        <tr>
+            <td>{{ cliente.codigo }}</td>
+            <td>{{ cliente.nome }}</td>
+            <td>{{ cliente.frequencia_dias }}</td>
+            <td>{{ cliente.ultima_coleta }}</td>
+            <td>{{ cliente.proxima_coleta }}</td>
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</body>
+
+</html>
