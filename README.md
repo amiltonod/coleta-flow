@@ -1,235 +1,230 @@
-# Coleta Flow 🚛
+# ColetaFlow 🚛
 
-O **Coleta Flow** é um sistema web logístico desenvolvido para automatizar, processar e gerenciar a programação semanal de coletas de resíduos a partir de planilhas Excel. A aplicação transforma dados brutos de históricos anteriores em uma grade de programação visual, inteligente e altamente editável.
-
-## 🎯 Objetivo do Projeto
-
-Desenvolvido especificamente para otimizar o planejamento da área logística da **Almeida Ambiental**, o sistema visa eliminar processos manuais suscetíveis a falhas, reduzir o tempo de roteirização e garantir a consistência das informações de coleta de clientes e fornecedores.
+> Sistema web de gestão e programação de coletas de resíduos desenvolvido para a **Almeida Ambiental — Araquari/SC**.
 
 ---
 
-## ✨ Funcionalidades Implementadas (O que já funciona)
+## Sobre o Projeto
 
-* **Importação Inteligente via Excel:** Leitura automatizada de planilhas de programações anteriores com mapeamento de colunas via Pandas, tratando de forma inteligente nomes compostos (separação de cliente, cidade e unidade).
+O **ColetaFlow** nasceu de uma necessidade real: eliminar o processo manual de montagem da programação semanal de coletas, que era feito em planilhas Excel sujeitas a erros, duplicidades e retrabalho.
 
-* **Geração Automática de Programação Semanal:** Motor de cálculo que prevê de forma preditiva a próxima data útil de coleta baseando-se na *Última Coleta + Frequência em Dias* ou alocando clientes em seus *Dias Fixos* da semana seguinte.
+O sistema lê os históricos de coletas anteriores, calcula automaticamente as próximas datas com base na frequência de cada cliente e gera uma grade semanal visual e editável — tudo isso em uma interface web acessível pelo navegador, sem necessidade de instalação por parte do usuário final.
 
-* **Sistema Robusto Anti-Duplicidade (Back-end):** Mecanismo de segurança implementado diretamente nas rotas e nos serviços de geração de cronograma. O sistema consulta o banco de dados antes de qualquer inserção (`INSERT`), bloqueando registros repetidos para o mesmo cliente na mesma data, mesmo se houver cliques duplos na interface ou reenvio de requisições.
-
-* **Edição Inline em Tempo Real (Interface Tabela):** Modificação direta na planilha visual da tela. Campos cruciais como *Frequência*, *Dia Fixo*, *Observações* e a própria data da *Última Coleta* podem ser editados e salvos instantaneamente via requisições assíncronas (`onblur` / AJAX).
-
-* **Adição Manual na Grade:** Permite incluir coletas extras ou avulsas na programação informando apenas o código do cliente e a data desejada.
-
-* **Replicação de Coletas:** Opção de copiar e espelhar um agendamento existente para outro dia da semana com validação automática de consistência.
+O projeto foi desenvolvido do zero como aplicação real de uso interno, e também como portfólio de transição para uma carreira em desenvolvimento de software, aplicando boas práticas de arquitetura, separação de responsabilidades e código limpo.
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## Funcionalidades
 
-### Backend
+### Importação de Dados
+- Upload de planilha Excel com histórico de coletas
+- Processamento via Pandas com tratamento de datas e campos nulos
+- Separação automática de nome, cidade e unidade a partir de campos compostos
+- Upsert inteligente: atualiza o cliente se o código já existe, insere se for novo — **nunca duplica**
 
-* Python 3.x
-* FastAPI (Framework de alto desempenho)
-* Uvicorn (Servidor ASGI)
+### Geração Automática de Programação
+- Cálculo da próxima coleta com base em `última coleta + frequência em dias`
+- Suporte a clientes com **dia fixo** da semana (ex: sempre na Terça)
+- Exclusão automática de finais de semana — coletas são movidas para o próximo dia útil
+- Programação sempre calculada para a **semana seguinte**
+- Motor anti-duplicidade: não gera coleta se o cliente já está agendado naquele dia
 
-### Análise e Manipulação de Dados
+### Grade Semanal Interativa
+- Visualização em colunas (Segunda a Sexta) com data exibida no cabeçalho
+- **Drag and drop** para mover coletas entre dias com atualização imediata no banco
+- **Replicar coleta** para outro dia da semana com validação de duplicidade
+- **Adicionar coleta manualmente** com busca por código ou nome do cliente
+- **Excluir coleta** da grade sem afetar o cadastro do cliente
+- Coletas fixas destacadas visualmente no topo de cada coluna
+- Atualização sem recarregar a página (requisições assíncronas via Fetch API)
 
-* Pandas
-* OpenPyXL
+### Banco de Dados de Clientes
+- Tabela completa com todos os campos do cadastro
+- Edição inline diretamente na célula: nome, cidade, frequência, última coleta, observação
+- Seleção de dia fixo via dropdown com salvamento automático
+- Feedback visual de sucesso/erro ao salvar
+- Coluna de programação da semana atualizada em tempo real
 
-### Banco de Dados & ORM
+### Cadastro e Busca de Clientes
+- Busca por código ou nome com debounce (300ms) para não sobrecarregar o servidor
+- Cadastro de novo cliente direto pelo modal de adição manual
 
-* SQLite (Armazenamento local persistente)
-* SQLAlchemy (Mapeamento Objeto-Relacional)
-
-### Frontend
-
-* HTML5
-* Bootstrap 5 (Estilização responsiva)
-* Jinja2 Templates (Renderização dinâmica pelo servidor)
+### Impressão
+- Layout otimizado para impressão — controles e tabelas de gestão ocultados automaticamente
 
 ---
 
-## 📂 Estrutura Atualizada do Projeto
+## Arquitetura e Decisões Técnicas
 
-```text
+O projeto foi estruturado em camadas com separação clara de responsabilidades:
+
+```
 coleta-flow/
-│
 ├── backend/
 │   └── app/
+│       ├── database.py              # Configuração SQLAlchemy + get_db (dependency injection)
+│       ├── main.py                  # Ponto de entrada FastAPI
 │       ├── models/
-│       │   ├── client.py          # Modelo da tabela de clientes (cadastro base)
-│       │   └── schedule.py        # Modelo da tabela de agendamentos/programação
-│       │
-│       ├── routers/
-│       │   └── clientes.py        # Rotas da API (Home, CRUD, Replicar, Adicionar)
-│       │
+│       │   ├── client.py            # Modelo da tabela clients
+│       │   └── schedule.py          # Modelo da tabela schedules
+│       ├── routes/
+│       │   └── clientes.py          # Rotas da API REST (CRUD completo)
 │       ├── services/
-│       │   ├── import_service.py   # Lógica de processamento e atualização do Excel
-│       │   └── generate_schedule.py# Regras de negócio e motor anti-duplicidade
-│       │
-│       ├── database.py            # Configuração da conexão com o SQLite
-│       └── main.py                # Ponto de entrada do FastAPI
-│
-├── templates/
-│   └── index.html                 # Interface visual principal da aplicação
-│
-├── uploads/                       # Diretório temporário de armazenamento de planilhas
-├── coletas.db                     # Arquivo de banco de dados SQLite persistente
-├── requirements.txt               # Lista de dependências do projeto
-└── README.md                      # Documentação do sistema
+│       │   ├── import_service.py    # Lógica de importação e upsert via Excel
+│       │   └── generate_schedule.py # Motor de geração da programação semanal
+│       ├── templates/
+│       │   └── index.html           # Interface principal (Jinja2 + Bootstrap + JS)
+│       └── uploads/                 # Diretório para arquivos Excel recebidos
 ```
+
+**Principais decisões:**
+
+- **Caminho absoluto para o banco** via `os.path.abspath(__file__)` — o banco sempre fica em `app/coletas.db`, independente de onde o servidor é iniciado
+- **Dependency injection** com `get_db()` — a sessão do banco é aberta e fechada automaticamente pelo FastAPI em cada requisição
+- **Upsert por código** na importação — o campo `codigo` é a chave de negócio; se já existe, atualiza; se não existe, insere
+- **Trava anti-duplicidade em três camadas**: na geração automática, na adição manual e na replicação — nenhuma delas permite dois agendamentos do mesmo cliente na mesma data
+- **Fetch API com async/await** no frontend — toda interação com a grade (mover, adicionar, excluir) acontece sem recarregar a página
 
 ---
 
-## ⚙️ Instalação
+## Tecnologias
 
-### 1. Clonar o repositório
+| Camada | Tecnologia |
+|--------|-----------|
+| Backend | Python 3.x · FastAPI · Uvicorn |
+| Banco de dados | SQLite · SQLAlchemy ORM |
+| Processamento de dados | Pandas · OpenPyXL |
+| Frontend | HTML5 · Bootstrap 5 · Jinja2 · Fetch API |
+| Controle de versão | Git · GitHub |
+
+---
+
+## Instalação
+
+**1. Clone o repositório**
 
 ```bash
-git clone https://github.com/seu-usuario/coleta-flow.git
+git clone https://github.com/amiltonod/coleta-flow.git
 cd coleta-flow
-```ta-flow
+git checkout refatoracao
 ```
 
-### 2. Criar ambiente virtual
+**2. Crie e ative o ambiente virtual**
 
 ```bash
+# Windows
 python -m venv venv
-```
+.\venv\Scripts\activate
 
-### 3. Ativar ambiente virtual
-
-Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-Linux/Mac:
-
-```bash
+# Linux / Mac
+python -m venv venv
 source venv/bin/activate
 ```
 
-### 4. Instalar dependências
+**3. Instale as dependências**
 
 ```bash
-pip install -r requirements.txt
+pip install fastapi uvicorn sqlalchemy pandas openpyxl jinja2 python-multipart
 ```
 
----
-
-## ▶️ Executando o Projeto
-
-Inicie o servidor:
+**4. Inicie o servidor**
 
 ```bash
 python -m uvicorn backend.app.main:app --reload
 ```
 
-Acesse no navegador:
+**5. Acesse no navegador**
 
-```text
+```
 http://127.0.0.1:8000
 ```
 
 ---
 
-## 🗄 Banco de Dados
+## Fluxo de Uso
 
-O sistema utiliza SQLite.
-
-Arquivo gerado:
-
-```text
-coletas.db
 ```
-
-As tabelas são criadas automaticamente pelo SQLAlchemy:
-
-```python
-Base.metadata.create_all(bind=engine)
-```
-
----
-
-## 🔄 Fluxo de Funcionamento
-
-### Importação
-
-1. O usuário seleciona a planilha da semana anterior.
-2. O sistema realiza o upload do arquivo.
-3. Os dados são processados utilizando Pandas.
-4. Os clientes são armazenados no banco de dados.
-
-### Processamento
-
-Após a importação:
-
-- Identificação da última coleta
-- Tratamento dos dados
-- Cálculo da próxima coleta
-- Geração da programação semanal
-
-### Visualização
-
-A programação é exibida na interface web contendo:
-
-- Código
-- Cliente
-- Cidade
-- Última coleta
-- Próxima coleta
-
----
-
-## 📤 Exportação
-
-O sistema permite gerar uma planilha Excel com a programação processada.
-
-Arquivo gerado:
-
-```text
-programacao_coletas.xlsx
+1. Importar planilha Excel com histórico de coletas
+        ↓
+2. Sistema processa e popula o banco de clientes
+        ↓
+3. Clicar em "Gerar Coletas" → programação da próxima semana é calculada
+        ↓
+4. Grade semanal exibe os agendamentos por dia
+        ↓
+5. Ajustes manuais: mover, adicionar, replicar ou excluir coletas
+        ↓
+6. Imprimir a grade para uso operacional
 ```
 
 ---
 
-## 📚 Aprendizados Aplicados
+## API — Principais Endpoints
 
-Durante o desenvolvimento foram utilizados conceitos de:
-
-- Estruturação de projetos Python
-- Programação orientada a objetos
-- FastAPI
-- SQLAlchemy ORM
-- SQLite
-- Manipulação de Excel com Pandas
-- Templates Jinja2
-- Upload de arquivos
-- Organização em camadas (Models, Services e Views)
-- Git e GitHub
-
----
-
-## 🔮 Próximas Melhorias
-
-- [ ] Histórico de coletas
-- [ ] Dashboard de indicadores
-- [ ] Filtros por cidade
-- [ ] Controle de usuários e permissões
-- [ ] Integração com Google Maps
-- [ ] Otimização automática de rotas
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/` | Interface principal |
+| `POST` | `/upload` | Importa planilha Excel |
+| `POST` | `/gerar-programacao` | Gera programação da próxima semana |
+| `GET` | `/programacao-semana` | Retorna grade semanal em JSON |
+| `PUT` | `/programacao/{id}` | Atualiza data/status de um agendamento |
+| `DELETE` | `/programacao/{id}` | Remove agendamento da grade |
+| `POST` | `/programacao/{id}/replicar` | Copia agendamento para outro dia |
+| `POST` | `/programacao/adicionar` | Adiciona coleta manual |
+| `GET` | `/clientes/buscar?q=` | Busca clientes por código ou nome |
+| `PUT` | `/clientes/{id}` | Atualiza cadastro do cliente |
+| `PUT` | `/clientes/{id}/fixar` | Define/remove dia fixo do cliente |
 
 ---
 
-## 👨‍💻 Autor
+## Modelo de Dados
+
+**clients**
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `codigo` | String | Código único do cliente |
+| `nome` | String | Nome do cliente/fornecedor |
+| `cidade` | String | Cidade |
+| `unidade` | String | Unidade/filial |
+| `frequencia_dias` | Integer | Intervalo em dias entre coletas |
+| `ultima_coleta` | Date | Data da última coleta realizada |
+| `proxima_coleta` | Date | Sugestão calculada da próxima coleta |
+| `fixo` | Boolean | Se possui dia fixo na semana |
+| `dia_fixo` | String | Nome do dia fixo (ex: "Terça") |
+
+**schedules**
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `codigo_cliente` | String | Referência ao código do cliente |
+| `cliente` | String | Nome do cliente no momento do agendamento |
+| `unidade` | String | Unidade no momento do agendamento |
+| `data_coleta` | Date | Data agendada |
+| `dia_semana` | String | Nome do dia da semana |
+| `status` | String | Status do agendamento (padrão: "Programado") |
+| `fixo` | Boolean | Se é uma coleta fixa |
+
+---
+
+## Próximas Melhorias
+
+- [ ] Histórico de coletas realizadas por cliente
+- [ ] Dashboard com indicadores operacionais (volume por dia, por cidade)
+- [ ] Filtros na grade por cidade ou rota
+- [ ] Exportação da programação para Excel
+- [ ] Otimização automática de rotas integrada
+- [ ] Controle de acesso por usuário
+- [ ] Integração com Google Maps para visualização geográfica
+
+---
+
+## Autor
 
 **Amilton Carvalho Jr.**
 
-- Tecnólogo em Logística
-- Pós-graduado em Gestão Ambiental Empresarial
-- Pós-graduado em Gestão de Transporte
+Tecnólogo em Logística · Pós-graduado em Gestão Ambiental e Gestão de Transporte
 
-Projeto desenvolvido para estudo de Python, automação logística e desenvolvimento web com FastAPI.
+Projeto desenvolvido como ferramenta real de uso interno e como portfólio de transição para desenvolvimento de software — aplicando Python, FastAPI, SQLAlchemy e boas práticas de arquitetura em um problema logístico real.
+
+[![GitHub](https://img.shields.io/badge/GitHub-amiltonod-181717?style=flat&logo=github)](https://github.com/amiltonod)
