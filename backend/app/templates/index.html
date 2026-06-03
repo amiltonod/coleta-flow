@@ -67,7 +67,7 @@
             border: 1px solid var(--borda-suave);
         }
 
-        /* ── BOTÕES DESIGN CLEAN ────────────────── */
+        /* ── BOTÕES ─────────────────────────────── */
         .btn-primary-almeida {
             background: var(--verde-escuro);
             color: #fff;
@@ -191,7 +191,7 @@
         .acoes-card button:hover { opacity: 1; }
         .vazio-dia { color: #ADB5BD; font-size: 0.68rem; text-align: center; padding: 16px 0; }
 
-        /* ── SEÇÃO DA TABELA BANCO DE DADOS ─────── */
+        /* ── BANCO DE DADOS DE CLIENTES ─────────── */
         .section-card {
             background: #fff;
             border-radius: 8px;
@@ -232,11 +232,9 @@
         }
         .input-inline:focus { border-color: var(--verde-medio); background: #fff; outline: none; border-radius: 4px; }
         
-        /* Feedback visual */
         .salvo-sucesso { background-color: #D1E7DD !important; color: #0F5132; }
         .salvo-erro { background-color: #F8D7DA !important; color: #842029; border-color: #EA868F !important; }
 
-        /* ── REGRAS DE IMPRESSÃO ────────────────── */
         @media print {
             .no-print { display: none !important; }
             body { background: #fff; font-size: 8px; }
@@ -340,7 +338,6 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-3" style="font-size:0.75rem;">
-                
                 <div class="mb-3">
                     <div class="btn-group btn-group-sm w-100" role="group">
                         <input type="radio" class="btn-check" name="modoCadastro" id="modoExistente" checked onclick="alternarModoCadastro('existente')">
@@ -383,7 +380,6 @@
                         <input type="number" id="manualFrequencia" class="form-control form-control-sm" placeholder="Frequência Base (Dias)">
                     </div>
                 </div>
-
             </div>
             <div class="modal-footer p-2">
                 <button id="btnSalvarManual" class="btn-primary-almeida w-100" onclick="salvarColetaManual()">Salvar e Agendar</button>
@@ -440,7 +436,6 @@ function formatarDatasIniciais() {
     });
 }
 
-// CORREÇÃO E FORMATADOR DA DATA BRASILEIRA COM SALVAMENTO CONVERTIDO
 async function processarDataExibicao(input, id) {
     let v = input.value.trim();
     if (!v) {
@@ -464,10 +459,7 @@ async function processarDataExibicao(input, id) {
         const exibicaoBR = `${dia}/${mes}/${ano}`;
         const formatoBanco = `${ano}-${mes}-${dia}`;
         
-        // Deixa visível em formato brasileiro para o usuário
         input.value = exibicaoBR;
-        
-        // Dispara o salvamento enviando a conversão aceita pelo Python SQL
         await salvarCampo(id, 'ultima_coleta', input, formatoBanco);
     } else {
         input.classList.add("salvo-erro");
@@ -493,12 +485,17 @@ function renderGrade(data) {
         html += `<div class="col-dia">
             <div class="cabecalho-dia">${DIAS[i]}<br><small>${dia.split('-').reverse().slice(0,2).join('/')}</small></div>
             <div class="corpo-dia" ondragover="event.preventDefault()" ondrop="drop(event, '${dia}')">`;
+        
         const coletas = data.programacao[dia] || [];
+        
+        // Regra de Ordenação dos Fixos sempre no topo
+        coletas.sort((a, b) => (b.fixo ? 1 : 0) - (a.fixo ? 1 : 0));
+
         coletas.forEach(c => {
             html += `<div class="celula-cliente ${c.fixo ? 'fixo' : ''}" draggable="true" ondragstart="event.dataTransfer.setData('text', ${c.id})">
                 ${c.fixo ? '<span class="fixo-badge">Fixo</span> ' : ''}<strong>${c.codigo}</strong> - ${c.cliente}
                 <div class="acoes-card no-print">
-                    <button title="Replicar" onclick="event.stopPropagation(); abrirReplicar('${c.codigo}')">🔁</button>
+                    <button title="Replicar" data-codigo="${c.codigo}" onclick="event.stopPropagation(); abrirReplicar(this)">🔁</button>
                     <button title="Remover" onclick="event.stopPropagation(); excluirColeta(${c.id})">❌</button>
                 </div>
             </div>`;
@@ -570,16 +567,19 @@ async function salvarColetaManual() {
             }
             
             const resCli = await fetch("/clientes/adicionar", {
-                method: "POST", headers: {"Content-Type":"application/json"},
+                method: "POST", 
+                headers: {"Content-Type":"application/json"},
                 body: JSON.stringify({
-                    codigo: codFinal, nome: nome,
+                    codigo: codFinal, 
+                    nome: nome,
                     cidade: document.getElementById("manualCidade").value.trim(), 
                     frequencia_dias: document.getElementById("manualFrequencia").value || null
                 })
             });
             
             if(!resCli.ok) {
-                alert("Incapaz de registrar cliente. Verifique se o código informado já não existe.");
+                const erroData = await resCli.json();
+                alert("Erro ao cadastrar: " + (erroData.detail || "Incapaz de registrar cliente."));
                 btn.disabled = false; btn.innerText = "Salvar e Agendar";
                 return;
             }
@@ -592,10 +592,16 @@ async function salvarColetaManual() {
             }
         }
         
-        await fetch("/programacao/adicionar", {
-            method: "POST", headers: {"Content-Type":"application/json"},
+        const resAgendamento = await fetch("/programacao/adicionar", {
+            method: "POST", 
+            headers: {"Content-Type":"application/json"},
             body: JSON.stringify({ codigo_cliente: codFinal, data_coleta: dia })
         });
+
+        if (!resAgendamento.ok) {
+            const erroAgend = await resAgendamento.json();
+            alert("Cliente cadastrado, mas erro ao agendar: " + (erroAgend.detail || "Verifique os dados informados."));
+        }
         
         if(modMan) modMan.hide();
         location.reload();
@@ -605,7 +611,6 @@ async function salvarColetaManual() {
     }
 }
 
-// SALVAR EDICÕES DIRETAS NA TABELA
 async function salvarCampo(id, nomeCampo, inputElement, valorCustomizado = undefined) {
     let valor = valorCustomizado !== undefined ? valorCustomizado : inputElement.value;
     let b = {}; 
@@ -629,22 +634,43 @@ async function salvarCampo(id, nomeCampo, inputElement, valorCustomizado = undef
     }
 }
 
-function abrirReplicar(cod) {
+function abrirReplicar(btnElement) {
+    const cod = btnElement.getAttribute("data-codigo");
     document.getElementById("replicarCodigo").value = cod;
     document.getElementById("replicarNovoDia").innerHTML = datasSemana.map((d,i)=>`<option value="${d}">${DIAS[i]}</option>`).join("");
     if(modRep) modRep.show();
 }
 
+/* ── INTERFACE BLINDADA DE CONFIRMAÇÃO DE REPLICAÇÃO ── */
 async function confirmarReplicacao() {
-    await fetch("/programacao/adicionar", {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ codigo_cliente: document.getElementById("replicarCodigo").value, data_coleta: document.getElementById("replicarNovoDia").value })
-    });
-    if(modRep) modRep.hide(); 
-    carregarSemana();
+    const cod = document.getElementById("replicarCodigo").value;
+    const dia = document.getElementById("replicarNovoDia").value;
+    
+    if (!cod || !dia) {
+        alert("Erro interno: Código ou Dia inválidos.");
+        return;
+    }
+    
+    try {
+        const res = await fetch("/programacao/adicionar", {
+            method: "POST", 
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ codigo_cliente: cod, data_coleta: dia })
+        });
+        
+        if(modRep) modRep.hide(); 
+        
+        if (res.ok) {
+            location.reload(); // Recarga integral força sincronia limpa com o back-end
+        } else {
+            const erroData = await res.json();
+            alert("Erro do servidor ao replicar: " + (erroData.detail || "Verifique os dados."));
+        }
+    } catch(e) {
+        alert("Falha de rede ao tentar comunicar a cópia.");
+    }
 }
 
-// FUNÇÃO DRAG AND DROP CORRIGIDA PARA ATUALIZAR E SALVAR NO SISTEMA IMEDIATAMENTE
 async function drop(e, dia) {
     e.preventDefault();
     const id = e.dataTransfer.getData("text");
@@ -657,9 +683,9 @@ async function drop(e, dia) {
             body: JSON.stringify({ data_coleta: dia }) 
         });
         if(res.ok) {
-            carregarSemana(); // Recarrega a grade com a alteração salva no banco
+            carregarSemana();
         } else {
-            alert("Erro ao salvar nova posição do box no servidor.");
+            alert("Erro ao salvar nova posição no servidor.");
         }
     } catch(err) {
         console.error("Falha ao mover box:", err);
@@ -667,7 +693,11 @@ async function drop(e, dia) {
 }
 
 async function atualizarDiaFixo(id, v) {
-    await fetch(`/clientes/${id}/fixar`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ fixo: !!v, dia_fixo: v||null }) });
+    await fetch(`/clientes/${id}/fixar`, { 
+        method: "PUT", 
+        headers: {"Content-Type":"application/json"}, 
+        body: JSON.stringify({ fixo: !!v, dia_fixo: v||null }) 
+    });
     carregarSemana();
 }
 
@@ -705,8 +735,12 @@ async function excluirCliente(id, event) {
     if(event) event.stopPropagation();
     if(confirm("Excluir este cliente definitivamente do Banco de Dados?")) { 
         const res = await fetch(`/clientes/${id}`, {method:"DELETE"}); 
-        if(res.ok) { location.reload(); } 
-        else { alert("Não foi possível excluir. Motivo: Verifique se este cliente possui coletas ativas registradas na grade."); }
+        if(res.ok) { 
+            location.reload(); 
+        } else { 
+            const erroData = await res.json();
+            alert("Não foi possível excluir: " + (erroData.detail || "Verifique se este cliente possui coletas ativas registradas na grade.")); 
+        }
     } 
 }
 </script>
