@@ -149,22 +149,48 @@ async def adicionar_cliente(cliente_in: ClienteCreate, db: Session = Depends(get
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
-@router.put("/clientes/{id}")
-async def atualizar_cliente(id: int, dados: Dict[str, Any], db: Session = Depends(get_db)):
-    cliente = db.query(Client).filter(Client.id == id).first()
+@router.put("/clientes/{cliente_id}")
+async def atualizar_cliente(
+    cliente_id: int,
+    dados: dict,
+    db: Session = Depends(get_db)
+):
+    cliente = db.query(Client).filter(Client.id == cliente_id).first()
     if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
-    
-    for key, value in dados.items():
-        if hasattr(cliente, key):
-            if key == 'ultima_coleta' and value:
-                try:
-                    value = date.fromisoformat(value)
-                except ValueError:
-                    pass
-            setattr(cliente, key, value)
+        return {"erro": "Cliente não encontrado"}
+
+    if "nome" in dados:
+        cliente.nome = dados["nome"]
+    if "cidade" in dados:
+        cliente.cidade = dados["cidade"]
+    if "unidade" in dados:
+        cliente.unidade = dados["unidade"]
+    if "observacao" in dados:
+        cliente.observacao = dados["observacao"]
+
+    if "frequencia_dias" in dados:
+        valor = dados["frequencia_dias"]
+        cliente.frequencia_dias = int(valor) if valor else None
+
+    if "ultima_coleta" in dados:
+        if dados["ultima_coleta"]:
+            cliente.ultima_coleta = date.fromisoformat(dados["ultima_coleta"])
+        else:
+            cliente.ultima_coleta = None
+
+    # Recalcula próxima coleta sempre que ultima_coleta ou frequencia mudar
+    if cliente.ultima_coleta and cliente.frequencia_dias:
+        cliente.proxima_coleta = cliente.ultima_coleta + timedelta(
+            days=cliente.frequencia_dias
+        )
+    else:
+        cliente.proxima_coleta = None
+
     db.commit()
-    return {"status": "sucesso"}
+    return {
+        "mensagem": "Cliente atualizado com sucesso",
+        "proxima_coleta": cliente.proxima_coleta.isoformat() if cliente.proxima_coleta else None
+    }
 
 @router.put("/clientes/{id}/fixar")
 async def fixar_cliente(id: int, dados: ClienteFixar, db: Session = Depends(get_db)):
