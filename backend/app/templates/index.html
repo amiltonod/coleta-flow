@@ -457,7 +457,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     carregarSemana();
     formatarDatasIniciais();
-    colorirProximasColetas();
 });
 
 // Conjunto de códigos agendados na semana (preenchido ao carregar a grade)
@@ -580,6 +579,7 @@ function renderGrade(data) {
             <div class="cabecalho-dia">${DIAS[i]}<br><small>${dia.split('-').reverse().slice(0,2).join('/')}</small></div>
             <div class="corpo-dia" ondragover="event.preventDefault()" ondrop="drop(event, '${dia}')">`;
         const coletas = data.programacao[dia] || [];
+        coletas.sort((a, b) => (b.fixo ? 1 : 0) - (a.fixo ? 1 : 0));
         coletas.forEach(c => {
             html += `<div class="celula-cliente ${c.fixo ? 'fixo' : ''}" draggable="true" ondragstart="event.dataTransfer.setData('text', ${c.id})">
                 ${c.fixo ? '<span class="fixo-badge">Fixo</span> ' : ''}<strong>${c.codigo}</strong> - ${c.cliente}
