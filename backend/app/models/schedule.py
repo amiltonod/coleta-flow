@@ -13,3 +13,4 @@ class Schedule(Base):
     dia_semana = Column(String, nullable=True)
     status = Column(String, default="Programado")
     fixo = Column(Boolean, default=False)
+
