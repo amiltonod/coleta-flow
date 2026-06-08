@@ -47,9 +47,54 @@ class ScheduleUpdate(BaseModel):
     data_coleta: str
 
 
+# ── FUNÇÃO DE FECHAMENTO AUTOMÁTICO ──────────────────
+def realizar_fechamento_automatico(db: Session):
+    """
+    Verifica se há coletas das semanas anteriores que ainda estão como 'Programado'.
+    Se houver, atualiza a ultima_coleta do cliente, recalcula a próxima e muda o status.
+    """
+    hoje = date.today()
+    # Descobre o dia da segunda-feira desta semana
+    dias_para_segunda = hoje.weekday()
+    segunda_atual = hoje - timedelta(days=dias_para_segunda)
+    
+    # Pega tudo que ficou para trás (antes desta segunda) e que ainda não foi fechado
+    coletas_pendentes = db.query(Schedule).filter(
+        Schedule.data_coleta < segunda_atual,
+        Schedule.status == "Programado"
+    ).all()
+
+    if not coletas_pendentes:
+        return # Se não tem nada atrasado, encerra a função rapidamente
+        
+    clientes_atualizados = {}
+    
+    for coleta in coletas_pendentes:
+        codigo = coleta.codigo_cliente
+        # Muda o status para não processar novamente numa próxima abertura
+        coleta.status = "Realizado" 
+        
+        # Guarda a maior data de coleta daquele cliente no passado
+        if codigo not in clientes_atualizados or coleta.data_coleta > clientes_atualizados[codigo]:
+            clientes_atualizados[codigo] = coleta.data_coleta
+            
+    # Atualiza os clientes
+    for codigo, ultima_data in clientes_atualizados.items():
+        cliente = db.query(Client).filter(Client.codigo == codigo).first()
+        if cliente:
+            cliente.ultima_coleta = ultima_data
+            if cliente.frequencia_dias:
+                cliente.proxima_coleta = ultima_data + timedelta(days=cliente.frequencia_dias)
+                
+    db.commit()
+
+
 # ── ROTAS DE PÁGINA E UPLOAD ─────────────────────────
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request, db: Session = Depends(get_db)):
+    # Executa a rotina de fechamento automático silenciosamente
+    realizar_fechamento_automatico(db)
+    
     clientes = db.query(Client).all()
     schedules = db.query(Schedule).all()
     fixos = db.query(Client).filter(Client.fixo == True).all()
