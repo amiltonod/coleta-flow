@@ -3,6 +3,14 @@ let datasSemana = [];
 let modMan, modRep;
 
 document.addEventListener("DOMContentLoaded", () => {
+    fetch("/fechar-semana", { method: "POST" })
+        .then(r => r.json())
+        .then(data => {
+            if (data.fechado) {
+                console.log("Semana fechada:", data.mensagem);
+            }
+        })
+        .catch(e => console.error("Erro ao fechar semana:", e));
     try {
         modMan = new bootstrap.Modal(document.getElementById('modalManual'));
         modRep = new bootstrap.Modal(document.getElementById('modalReplicar'));

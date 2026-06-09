@@ -17,6 +17,9 @@ from backend.app.models.schedule import Schedule
 from backend.app.services.import_service import importar_clientes
 from backend.app.services.generate_schedule import gerar_programacao
 
+from backend.app.services.fechar_semana import fechar_semana as processar_fechamento
+from backend.app.models.controle import Controle
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -337,3 +340,13 @@ async def processar_geracao_automatica(db: Session = Depends(get_db)):
         return {"status": "sucesso"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+@router.post("/fechar-semana")
+async def fechar_semana_route(db: Session = Depends(get_db)):
+    """
+    Verifica e fecha semanas passadas não processadas.
+    Chamado automaticamente pelo frontend ao carregar.
+    """
+    resultado = processar_fechamento(db)
+    return resultado
