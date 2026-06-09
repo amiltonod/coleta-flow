@@ -3,7 +3,6 @@ from fastapi.staticfiles import StaticFiles
 from backend.app.database import Base, engine
 from backend.app.models import client, schedule, controle  # ← adiciona controle
 from backend.app.routes.clientes import router as clientes_router
-
 import os
 
 Base.metadata.create_all(bind=engine)

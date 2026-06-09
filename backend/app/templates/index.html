@@ -71,14 +71,33 @@
                             <td><input type="text" class="input-inline" value="{{ c.cidade or '' }}" onblur="salvarCampo({{ c.id }}, 'cidade', this)"></td>
                             <td class="text-center"><input type="number" class="freq-input input-inline" value="{{ c.frequencia_dias or '' }}" onblur="salvarCampo({{ c.id }}, 'frequencia_dias', this)"></td>
                             <td>
-                                <select class="input-inline" onchange="atualizarDiaFixo({{ c.id }}, this.value)" style="font-weight:600; color:var(--verde-escuro)">
-                                    <option value="" {% if not c.dia_fixo %}selected{% endif %}>—</option>
-                                    <option value="Segunda" {% if c.dia_fixo == 'Segunda' %}selected{% endif %}>Segunda</option>
-                                    <option value="Terça" {% if c.dia_fixo == 'Terça' %}selected{% endif %}>Terça</option>
-                                    <option value="Quarta" {% if c.dia_fixo == 'Quarta' %}selected{% endif %}>Quarta</option>
-                                    <option value="Quinta" {% if c.dia_fixo == 'Quinta' %}selected{% endif %}>Quinta</option>
-                                    <option value="Sexta" {% if c.dia_fixo == 'Sexta' %}selected{% endif %}>Sexta</option>
-                                </select>
+                                {% set dias_fixos = c.dia_fixo.split(',') if c.dia_fixo else [] %}
+
+                                <div class="dropdown dias-fixos-dropdown" data-cliente-id="{{ c.id }}">
+                                    <button
+                                        class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                        type="button"
+                                        data-bs-toggle="dropdown">
+                                        📌
+                                    </button>
+
+                                    <ul class="dropdown-menu p-2">
+                                        {% for dia in ['Segunda','Terça','Quarta','Quinta','Sexta'] %}
+                                        <li>
+                                            <label class="dropdown-item">
+                                                <input
+                                                    type="checkbox"
+                                                    class="checkbox-dia-fixo"
+                                                    data-cliente-id="{{ c.id }}"
+                                                    value="{{ dia }}"
+                                                    {% if dia in dias_fixos %}checked{% endif %}
+                                                >
+                                                {{ dia }}
+                                            </label>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
                             </td>
                             <td>
                                 <input type="text" class="input-inline data-coleta-input" style="font-weight: 500;" value="{{ c.ultima_coleta or '' }}" placeholder="dd/mm/aaaa" onblur="processarDataExibicao(this, {{ c.id }})">

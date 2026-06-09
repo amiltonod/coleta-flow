@@ -3,6 +3,7 @@ let datasSemana = [];
 let modMan, modRep;
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Fecha semanas passadas automaticamente
     fetch("/fechar-semana", { method: "POST" })
         .then(r => r.json())
         .then(data => {
@@ -11,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         })
         .catch(e => console.error("Erro ao fechar semana:", e));
+
+    // resto do código existente...
     try {
         modMan = new bootstrap.Modal(document.getElementById('modalManual'));
         modRep = new bootstrap.Modal(document.getElementById('modalReplicar'));
@@ -351,10 +354,56 @@ async function drop(e, dia) {
     }
 }
 
-async function atualizarDiaFixo(id, v) {
-    await fetch(`/clientes/${id}/fixar`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ fixo: !!v, dia_fixo: v||null }) });
+async function atualizarDiaFixo(id, valor) {
+    // Coleta todos os checkboxes marcados para este cliente
+    const checkboxes = document.querySelectorAll(
+        `.checkbox-dia-fixo[data-cliente-id="${id}"]:checked`
+    );
+    const diasSelecionados = Array.from(checkboxes).map(cb => cb.value);
+    const diaFixoStr = diasSelecionados.join(",");
+
+    await fetch(`/clientes/${id}/fixar`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            fixo: diasSelecionados.length > 0,
+            dia_fixo: diaFixoStr || null
+        })
+    });
     carregarSemana();
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    document.querySelectorAll(".dias-fixos-dropdown").forEach(dropdown => {
+
+        dropdown.addEventListener("hidden.bs.dropdown", async function () {
+
+            const clienteId = this.dataset.clienteId;
+
+            const checkboxes = document.querySelectorAll(
+                `.checkbox-dia-fixo[data-cliente-id="${clienteId}"]:checked`
+            );
+
+            const diasSelecionados = Array.from(checkboxes).map(cb => cb.value);
+
+            await fetch(`/clientes/${clienteId}/fixar`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    fixo: diasSelecionados.length > 0,
+                    dia_fixo: diasSelecionados.join(",") || null
+                })
+            });
+
+            carregarSemana();
+        });
+
+    });
+
+});
 
 async function gerarProgramacao() { 
     try {

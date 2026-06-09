@@ -69,15 +69,13 @@ def fechar_semana(db: Session) -> dict:
 
         cliente.ultima_coleta = data_coleta
 
-        # Recalcula proxima_coleta se tiver frequencia
         if cliente.frequencia_dias:
-            from datetime import timedelta
             cliente.proxima_coleta = data_coleta + timedelta(
                 days=cliente.frequencia_dias
             )
 
         clientes_atualizados += 1
-
+        
     # Marca a semana como fechada
     controle.ultima_semana_fechada = segunda_semana_passada
     db.commit()

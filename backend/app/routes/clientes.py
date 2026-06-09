@@ -20,6 +20,8 @@ from backend.app.services.generate_schedule import gerar_programacao
 from backend.app.services.fechar_semana import fechar_semana as processar_fechamento
 from backend.app.models.controle import Controle
 
+
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -48,6 +50,9 @@ class ScheduleAdd(BaseModel):
 
 class ScheduleUpdate(BaseModel):
     data_coleta: str
+
+
+
 
 
 # ── FUNÇÃO DE FECHAMENTO AUTOMÁTICO ──────────────────
@@ -240,15 +245,26 @@ async def atualizar_cliente(
         "proxima_coleta": cliente.proxima_coleta.isoformat() if cliente.proxima_coleta else None
     }
 
-@router.put("/clientes/{id}/fixar")
-async def fixar_cliente(id: int, dados: ClienteFixar, db: Session = Depends(get_db)):
-    cliente = db.query(Client).filter(Client.id == id).first()
+@router.put("/clientes/{cliente_id}/fixar")
+async def fixar_cliente(
+    cliente_id: int,
+    dados: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Fixa ou desfixa um cliente.
+    dia_fixo aceita múltiplos dias separados por vírgula:
+    ex: "Segunda,Quinta"
+    """
+    cliente = db.query(Client).filter(Client.id == cliente_id).first()
     if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
-    cliente.fixo = dados.fixo
-    cliente.dia_fixo = dados.dia_fixo
+        return {"erro": "Cliente não encontrado"}
+
+    cliente.fixo = dados.get("fixo", False)
+    cliente.dia_fixo = dados.get("dia_fixo", None)
+
     db.commit()
-    return {"status": "sucesso"}
+    return {"mensagem": "Cliente atualizado com sucesso"}
 
 @router.delete("/clientes/{id}")
 async def excluir_cliente(id: int, db: Session = Depends(get_db)):
@@ -350,3 +366,4 @@ async def fechar_semana_route(db: Session = Depends(get_db)):
     """
     resultado = processar_fechamento(db)
     return resultado
+
