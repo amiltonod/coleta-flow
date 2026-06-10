@@ -1,6 +1,9 @@
 const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
 let datasSemana = [];
 let modMan, modRep;
+let offsetSemana = 0; // 0=próxima, -1=atual, -2=anterior
+
+
 
 document.addEventListener("DOMContentLoaded", () => {
     // Fecha semanas passadas automaticamente
@@ -138,17 +141,16 @@ async function processarDataExibicao(input, id) {
     }
 }
 
-async function carregarSemana() {
+async function carregarSemana(offset = null) {
+    if (offset !== null) offsetSemana = offset;
     try {
-        const res = await fetch("/programacao-semana");
+        const res = await fetch(`/programacao-semana?offset=${offsetSemana}`);
         const data = await res.json();
         datasSemana = data.dias;
         codigosAgendados = new Set();
-        
         Object.values(data.programacao).forEach(coletas => {
             coletas.forEach(c => codigosAgendados.add(c.codigo));
         });
-        
         renderGrade(data);
         colorirProximasColetas();
     } catch(e) {
@@ -158,32 +160,62 @@ async function carregarSemana() {
 
 function renderGrade(data) {
     const container = document.getElementById("gradeSemana");
-    let html = `<div class="grade-cols">`;
-    
+    const semanaAtual = data.semana_atual;
+
+    // Label da semana
+    const labels = {
+        0: "📅 Próxima Semana",
+        "-1": "📋 Semana Atual",
+        "-2": "🗂️ Semana Anterior"
+    };
+    const labelSemana = labels[String(data.offset)] || `Semana (offset ${data.offset})`;
+
+    let html = `
+        <div class="grade-header d-flex justify-content-between align-items-center no-print">
+            <button class="btn-outline-almeida" onclick="carregarSemana(${data.offset - 1})">← Anterior</button>
+            <span style="font-size:0.78rem; font-weight:600; color:var(--verde-escuro)">${labelSemana}</span>
+            <button class="btn-outline-almeida" onclick="carregarSemana(${data.offset + 1})">Próxima →</button>
+        </div>
+        <div class="grade-cols">
+    `;
+
     data.dias.forEach((dia, i) => {
         html += `<div class="col-dia">
-            <div class="cabecalho-dia">${DIAS[i]}<br><small>${dia.split('-').reverse().slice(0,2).join('/')}</small></div>
+            <div class="cabecalho-dia">${DIAS[i]}<br>
+            <small>${dia.split('-').reverse().slice(0,2).join('/')}</small></div>
             <div class="corpo-dia" ondragover="event.preventDefault()" ondrop="drop(event, '${dia}')">`;
-            
+
         const coletas = data.programacao[dia] || [];
         coletas.sort((a, b) => (b.fixo ? 1 : 0) - (a.fixo ? 1 : 0));
-        
+
         coletas.forEach(c => {
-            html += `<div class="celula-cliente ${c.fixo ? 'fixo' : ''}" draggable="true" ondragstart="event.dataTransfer.setData('text', ${c.id})">
-                ${c.fixo ? '<span class="fixo-badge">Fixo</span> ' : ''}<strong>${c.codigo}</strong> - ${c.cliente}
+            const concluido = c.status === "Concluído";
+            const estilo = concluido ? "opacity:0.6; text-decoration:line-through;" : "";
+
+            html += `<div class="celula-cliente ${c.fixo ? 'fixo' : ''}"
+                draggable="true"
+                ondragstart="event.dataTransfer.setData('text', ${c.id})"
+                style="${estilo}">
+                ${c.fixo ? '<span class="fixo-badge">Fixo</span> ' : ''}
+                <strong>${c.codigo}</strong> - ${c.cliente}
                 <div class="acoes-card no-print">
-                    <button title="Replicar" onclick="event.stopPropagation(); abrirReplicar('${c.codigo}')">🔁</button>
-                    <button title="Remover" onclick="event.stopPropagation(); excluirColeta(${c.id})">❌</button>
+                    ${semanaAtual && !concluido ? `
+                    <button title="Confirmar coleta"
+                        onclick="event.stopPropagation(); abrirConfirmar(${c.id}, '${dia}')">✅</button>` : ''}
+                    <button title="Replicar"
+                        onclick="event.stopPropagation(); abrirReplicar('${c.codigo}')">🔁</button>
+                    <button title="Remover"
+                        onclick="event.stopPropagation(); excluirColeta(${c.id})">❌</button>
                 </div>
             </div>`;
         });
-        
-        if(coletas.length === 0) { 
-            html += `<div class="vazio-dia">Sem coletas</div>`; 
+
+        if (coletas.length === 0) {
+            html += `<div class="vazio-dia">Sem coletas</div>`;
         }
         html += `</div></div>`;
     });
-    
+
     container.innerHTML = html + `</div>`;
 }
 
@@ -205,16 +237,42 @@ async function filtrarFornecedores() {
     const res = await fetch(`/clientes/buscar?q=${encodeURIComponent(q)}`);
     const itens = await res.json();
     
-    lista.innerHTML = itens.map(i => `<div class="list-group-item list-group-item-action py-1 small" style="cursor:pointer;" onclick="selecionarBusca('${i.codigo}','${i.nome}')">${i.codigo} | ${i.nome}</div>`).join("");
+    // Mudamos o onclick para passar o elemento inteiro (this) 
+    // e guardamos os dados de forma segura em data-attributes
+    lista.innerHTML = itens.map(i => `
+        <div class="list-group-item list-group-item-action py-1 small" 
+             style="cursor:pointer;" 
+             data-codigo="${i.codigo}" 
+             data-nome="${i.nome}" 
+             onclick="selecionarBusca(this)">
+             <strong>${i.codigo}</strong> | ${i.nome}
+        </div>
+    `).join("");
+    
     lista.style.display = "block";
 }
 
-function selecionarBusca(c, n) {
-    document.getElementById("manualCodigo").value = c;
-    document.getElementById("manualBusca").value = n;
-    document.getElementById("listaSugestoes").style.display = "none";
+function selecionarBusca(elemento) {
+    // Recupera os dados guardados de forma segura
+    const codigo = elemento.getAttribute('data-codigo');
+    const nome = elemento.getAttribute('data-nome');
+    
+    const inputCodigo = document.getElementById("manualCodigo");
+    const inputBusca = document.getElementById("manualBusca");
+    const lista = document.getElementById("listaSugestoes");
+    
+    // Alerta de segurança caso faltar algum ID no HTML
+    if (!inputCodigo || !inputBusca) {
+        console.error("ERRO: Os inputs 'manualCodigo' ou 'manualBusca' não foram encontrados no HTML.");
+        alert("Erro interno: Campos de texto não encontrados no formulário.");
+        return;
+    }
+    
+    // Preenche os campos e esconde a lista
+    inputCodigo.value = codigo;
+    inputBusca.value = nome;
+    lista.style.display = "none";
 }
-
 function abrirModalManual() {
     document.getElementById("modoExistente").checked = true;
     alternarModoCadastro('existente');
@@ -456,4 +514,39 @@ async function excluirCliente(id, event) {
             alert("Não foi possível excluir. Motivo: Verifique se este cliente possui coletas ativas registradas na grade."); 
         }
     } 
+}
+
+// ── CONFIRMAR COLETA ───────────────────────────────────────
+function abrirConfirmar(scheduleId, diaIso) {
+    const dataFormatada = diaIso; // YYYY-MM-DD
+    const confirmou = confirm(
+        `Confirmar coleta realizada em ${diaIso.split('-').reverse().join('/')}?\n\nClique OK para confirmar ou Cancelar para informar outra data.`
+    );
+
+    if (confirmou) {
+        salvarConfirmacao(scheduleId, dataFormatada);
+    } else {
+        const novaData = prompt(
+            "Informe a data real da coleta (DD/MM/AAAA):",
+            diaIso.split('-').reverse().join('/')
+        );
+        if (!novaData) return;
+
+        // Converte DD/MM/AAAA para YYYY-MM-DD
+        const partes = novaData.split('/');
+        if (partes.length !== 3) return alert("Data inválida.");
+        const dataConvertida = `${partes[2]}-${partes[1]}-${partes[0]}`;
+        salvarConfirmacao(scheduleId, dataConvertida);
+    }
+}
+
+async function salvarConfirmacao(scheduleId, dataIso) {
+    const res = await fetch(`/confirmar-coleta/${scheduleId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_realizada: dataIso })
+    });
+    const data = await res.json();
+    if (data.erro) return alert(data.erro);
+    await carregarSemana();
 }

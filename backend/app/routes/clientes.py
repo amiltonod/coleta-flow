@@ -124,37 +124,47 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
 
 # ── ROTAS DOS CLIENTES (CRUD & BUSCA COLETAS) ────────
 @router.get("/programacao-semana")
-async def obter_programacao_semana(db: Session = Depends(get_db)):
+async def programacao_semana(
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna programação por semana.
+    offset=0  → próxima semana
+    offset=-1 → semana atual
+    offset=-2 → semana anterior
+    """
     hoje = date.today()
-    dias_para_segunda = (0 - hoje.weekday() + 7) % 7
-    if dias_para_segunda == 0:
-        dias_para_segunda = 7
-    segunda = hoje + timedelta(days=dias_para_segunda)
+    dias_ate_segunda = (7 - hoje.weekday()) % 7 or 7
+    segunda_base = hoje + timedelta(days=dias_ate_segunda)
+    segunda = segunda_base + timedelta(weeks=offset)
     dias_semana = [segunda + timedelta(days=i) for i in range(5)]
-    
-    dias_iso = [d.isoformat() for d in dias_semana]
-    resultado_programacao = {d: [] for d in dias_iso}
-    
-    schedules = db.query(Schedule).filter(Schedule.data_coleta.in_(dias_semana)).all()
+
+    resultado = {}
+    for dia in dias_semana:
+        resultado[dia.isoformat()] = []
+
+    schedules = db.query(Schedule).all()
     for s in schedules:
-        cod_s = str(s.codigo_cliente).strip()
-        
-        # BLINDAGEM: Garante correspondência mesmo se houver variação de string/int ou zeros à esquerda
-        condicoes = [Client.codigo == cod_s]
-        if cod_s.isdigit():
-            condicoes.append(Client.codigo == str(int(cod_s)))
-            condicoes.append(Client.codigo == int(cod_s))
-            
-        cliente = db.query(Client).filter(or_(*condicoes)).first()
-        if cliente:
-            resultado_programacao[s.data_coleta.isoformat()].append({
+        if s.data_coleta and s.data_coleta in dias_semana:
+            resultado[s.data_coleta.isoformat()].append({
                 "id": s.id,
-                "codigo": cliente.codigo,  # Retorna sempre o código oficial e higienizado do cadastro
-                "cliente": cliente.nome,
-                "fixo": cliente.fixo
+                "codigo": s.codigo_cliente,
+                "cliente": s.cliente,
+                "unidade": s.unidade or "",
+                "status": s.status,
+                "fixo": s.fixo or False,
             })
-            
-    return {"dias": dias_iso, "programacao": resultado_programacao}
+
+    for dia in resultado:
+        resultado[dia].sort(key=lambda x: (not x["fixo"], x["cliente"]))
+
+    return {
+        "dias": [d.isoformat() for d in dias_semana],
+        "programacao": resultado,
+        "offset": offset,
+        "semana_atual": offset == -1,
+    }
 
 @router.get("/clientes/buscar")
 async def buscar_clientes(q: str, db: Session = Depends(get_db)):
@@ -279,6 +289,44 @@ async def excluir_cliente(id: int, db: Session = Depends(get_db)):
     db.delete(cliente)
     db.commit()
     return {"status": "sucesso"}
+
+
+@router.post("/confirmar-coleta/{schedule_id}")
+async def confirmar_coleta(
+    schedule_id: int,
+    dados: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Confirma que uma coleta foi realizada.
+    Atualiza ultima_coleta do cliente e recalcula proxima_coleta.
+    """
+    schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
+    if not schedule:
+        return {"erro": "Agendamento não encontrado"}
+
+    data_realizada = date.fromisoformat(dados["data_realizada"])
+
+    # Atualiza o status do agendamento
+    schedule.status = "Concluído"
+    schedule.data_coleta = data_realizada
+
+    # Atualiza o cliente
+    cliente = db.query(Client).filter(
+        Client.codigo == schedule.codigo_cliente
+    ).first()
+
+    if cliente:
+        # Só atualiza se for a data mais recente
+        if not cliente.ultima_coleta or data_realizada > cliente.ultima_coleta:
+            cliente.ultima_coleta = data_realizada
+            if cliente.frequencia_dias:
+                cliente.proxima_coleta = data_realizada + timedelta(
+                    days=cliente.frequencia_dias
+                )
+
+    db.commit()
+    return {"mensagem": "Coleta confirmada com sucesso"}
 
 
 # ── ROTAS DE PROGRAMAÇÃO (AGENDAMENTOS) ──────────────
