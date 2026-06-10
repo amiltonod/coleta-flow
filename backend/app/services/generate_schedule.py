@@ -1,8 +1,8 @@
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
 from backend.app.models.client import Client
 from backend.app.models.schedule import Schedule
-
 
 DIAS_SEMANA = {
     0: "Segunda",
@@ -14,7 +14,8 @@ DIAS_SEMANA = {
     6: "Domingo",
 }
 
-DIAS_SEMANA_REVERSO = {v: k for k, v in DIAS_SEMANA.items()}
+# Criamos o dicionário reverso totalmente em minúsculo para ignorar erros de digitação
+DIAS_SEMANA_REVERSO = {v.lower(): k for k, v in DIAS_SEMANA.items()}
 
 
 def ajustar_para_dia_util(data: date) -> date:
@@ -24,26 +25,36 @@ def ajustar_para_dia_util(data: date) -> date:
 
 
 def proxima_data_para_dia(dia_nome: str, segunda: date) -> date:
-    offset = DIAS_SEMANA_REVERSO.get(dia_nome.strip(), 0)
+    nome_limpo = dia_nome.strip().lower()
+    offset = DIAS_SEMANA_REVERSO.get(nome_limpo)
+    
+    # Se não for um dia válido (ex: texto "Por solicitação" jogado no campo errado), retorna None
+    if offset is None:
+        return None
+        
     return segunda + timedelta(days=offset)
 
 
 def ja_agendado_na_data(db: Session, codigo: str, data: date) -> bool:
-    """Verifica se já existe agendamento para aquele cliente naquela data específica."""
+    """Verifica duplicidade limpando espaços, tratando zeros à esquerda e isolando apenas a DATA."""
+    cod_limpo = str(codigo).strip()
+    # Cria uma variação sem zeros à esquerda se for numérico (ex: "015" vira "15")
+    cod_alternativo = str(int(cod_limpo)) if cod_limpo.isdigit() else cod_limpo
+
     existente = db.query(Schedule).filter(
-        Schedule.codigo_cliente == codigo,
-        Schedule.data_coleta == data
+        or_(
+            Schedule.codigo_cliente == cod_limpo,
+            Schedule.codigo_cliente == cod_alternativo
+        ),
+        func.date(Schedule.data_coleta) == data  # func.date ignora componentes de hora/timestamp do banco
     ).first()
+    
     return existente is not None
 
 
 def gerar_programacao(db: Session) -> dict:
     """
-    Gera a programação da próxima semana.
-    - Clientes fixos: um agendamento por dia fixo (aceita múltiplos dias)
-    - Clientes normais: ultima_coleta + frequencia_dias
-    - Ignora clientes com 'por solicitação' na observação
-    - Nunca duplica
+    Gera a programação da próxima semana de forma blindada.
     """
     clientes = db.query(Client).all()
 
@@ -62,9 +73,11 @@ def gerar_programacao(db: Session) -> dict:
 
     for cliente in clientes:
 
-        # Ignora "Por solicitação" — case insensitive
-        if cliente.observacao and \
-           "por solicitação" in cliente.observacao.lower():
+        # ── BLINDAGEM 1: Checagem ultra-segura de "Por Solicitação" (com ou sem acento)
+        obs_texto = (cliente.observacao or "").lower()
+        dia_fixo_texto = (cliente.dia_fixo or "").lower()
+        
+        if "solicita" in obs_texto or "solicita" in dia_fixo_texto:
             solicitacao += 1
             continue
 
@@ -75,6 +88,10 @@ def gerar_programacao(db: Session) -> dict:
             for dia_nome in dias_fixos:
                 data_coleta = proxima_data_para_dia(dia_nome, segunda)
 
+                # Se o texto do dia for inválido, ignora para não agendar na segunda por erro
+                if data_coleta is None:
+                    continue
+
                 if ja_agendado_na_data(db, cliente.codigo, data_coleta):
                     duplicados += 1
                     continue
@@ -84,7 +101,7 @@ def gerar_programacao(db: Session) -> dict:
                     codigo_cliente=cliente.codigo,
                     unidade=cliente.unidade,
                     data_coleta=data_coleta,
-                    dia_semana=dia_nome,
+                    dia_semana=dia_nome.strip().capitalize(),
                     status="Programado",
                     fixo=True,
                 )

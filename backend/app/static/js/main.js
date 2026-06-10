@@ -1,9 +1,9 @@
 const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
 let datasSemana = [];
 let modMan, modRep;
-let offsetSemana = parseInt(localStorage.getItem("offsetSemana")) || 0; // 0=próxima, -1=atual, -2=anterior
 
-
+// Recupera a última semana visualizada. Se não houver, assume 0 (Próxima)
+let offsetSemana = parseInt(localStorage.getItem("offsetSemana")) || 0;
 
 document.addEventListener("DOMContentLoaded", () => {
     // Fecha semanas passadas automaticamente
@@ -16,7 +16,6 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .catch(e => console.error("Erro ao fechar semana:", e));
 
-    // resto do código existente...
     try {
         modMan = new bootstrap.Modal(document.getElementById('modalManual'));
         modRep = new bootstrap.Modal(document.getElementById('modalReplicar'));
@@ -29,6 +28,59 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Conjunto de códigos agendados na semana (preenchido ao carregar a grade)
 let codigosAgendados = new Set();
+
+// ── SISTEMA DE NOTIFICAÇÕES MODERNAS (TOASTS) ──────────────────
+function mostrarToast(mensagem, tipo = 'danger') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const bgClass = tipo === 'success' ? 'bg-success' : (tipo === 'warning' ? 'bg-warning text-dark' : 'bg-danger');
+    
+    const toastHtml = `
+        <div class="toast align-items-center text-white ${bgClass} border-0 shadow" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body fw-medium">${mensagem}</div>
+                <button type="button" class="btn-close btn-close-white m-auto me-2" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    const div = document.createElement('div');
+    div.innerHTML = toastHtml.trim();
+    const toastElement = div.firstChild;
+    container.appendChild(toastElement);
+    
+    const bsToast = new bootstrap.Toast(toastElement, { delay: 4000 });
+    bsToast.show();
+    
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
+
+// ── SISTEMA DE CONFIRMAÇÃO ASSÍNCRONA (MODAL INTERNO) ──────────
+function perguntar(mensagem) {
+    return new Promise((resolve) => {
+        document.getElementById('modalConfirmacaoTexto').innerText = mensagem;
+        const modalEl = document.getElementById('modalConfirmacao');
+        const modal = new bootstrap.Modal(modalEl);
+        const btnConfirmar = document.getElementById('btnConfirmarModal');
+        
+        const novoBtn = btnConfirmar.cloneNode(true);
+        btnConfirmar.parentNode.replaceChild(novoBtn, btnConfirmar);
+        
+        novoBtn.addEventListener('click', () => {
+            modal.hide();
+            resolve(true);
+        });
+        
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            resolve(false);
+        }, { once: true });
+        
+        modal.show();
+    });
+}
 
 function colorirProximasColetas() {
     const hoje = new Date();
@@ -106,7 +158,6 @@ function formatarDatasIniciais() {
     });
 }
 
-// CORREÇÃO E FORMATADOR DA DATA BRASILEIRA COM SALVAMENTO CONVERTIDO
 async function processarDataExibicao(input, id) {
     let v = input.value.trim();
     if (!v) {
@@ -130,10 +181,7 @@ async function processarDataExibicao(input, id) {
         const exibicaoBR = `${dia}/${mes}/${ano}`;
         const formatoBanco = `${ano}-${mes}-${dia}`;
         
-        // Deixa visível em formato brasileiro para o usuário
         input.value = exibicaoBR;
-        
-        // Dispara o salvamento enviando a conversão aceita pelo Python SQL
         await salvarCampo(id, 'ultima_coleta', input, formatoBanco);
     } else {
         input.classList.add("salvo-erro");
@@ -144,7 +192,7 @@ async function processarDataExibicao(input, id) {
 async function carregarSemana(offset = null) {
     if (offset !== null) {
         offsetSemana = offset;
-        localStorage.setItem("offsetSemana", offsetSemana); // Salva a semana atual no navegador
+        localStorage.setItem("offsetSemana", offsetSemana);
     }
     try {
         const res = await fetch(`/programacao-semana?offset=${offsetSemana}`);
@@ -165,7 +213,6 @@ function renderGrade(data) {
     const container = document.getElementById("gradeSemana");
     const semanaAtual = data.semana_atual;
 
-    // Label da semana
     const labels = {
         0: "📅 Próxima Semana",
         "-1": "📋 Semana Atual",
@@ -240,8 +287,6 @@ async function filtrarFornecedores() {
     const res = await fetch(`/clientes/buscar?q=${encodeURIComponent(q)}`);
     const itens = await res.json();
     
-    // Mudamos o onclick para passar o elemento inteiro (this) 
-    // e guardamos os dados de forma segura em data-attributes
     lista.innerHTML = itens.map(i => `
         <div class="list-group-item list-group-item-action py-1 small" 
              style="cursor:pointer;" 
@@ -256,7 +301,6 @@ async function filtrarFornecedores() {
 }
 
 function selecionarBusca(elemento) {
-    // Recupera os dados guardados de forma segura
     const codigo = elemento.getAttribute('data-codigo');
     const nome = elemento.getAttribute('data-nome');
     
@@ -264,18 +308,17 @@ function selecionarBusca(elemento) {
     const inputBusca = document.getElementById("manualBusca");
     const lista = document.getElementById("listaSugestoes");
     
-    // Alerta de segurança caso faltar algum ID no HTML
     if (!inputCodigo || !inputBusca) {
-        console.error("ERRO: Os inputs 'manualCodigo' ou 'manualBusca' não foram encontrados no HTML.");
-        alert("Erro interno: Campos de texto não encontrados no formulário.");
+        console.error("ERRO: Elementos não encontrados.");
+        mostrarToast("Erro interno ao preencher formulário.", "danger");
         return;
     }
     
-    // Preenche os campos e esconde a lista
     inputCodigo.value = codigo;
     inputBusca.value = nome;
     lista.style.display = "none";
 }
+
 function abrirModalManual() {
     document.getElementById("modoExistente").checked = true;
     alternarModoCadastro('existente');
@@ -305,7 +348,7 @@ async function salvarColetaManual() {
             const nome = document.getElementById("manualNome").value.trim();
             
             if(!codFinal || !nome) {
-                alert("Para novos clientes, o Código e o Nome são obrigatórios.");
+                mostrarToast("Para novos clientes, o Código e o Nome são obrigatórios.", "warning");
                 btn.disabled = false; btn.innerText = "Salvar e Agendar";
                 return;
             }
@@ -322,14 +365,14 @@ async function salvarColetaManual() {
             });
             
             if(!resCli.ok) {
-                alert("Incapaz de registrar cliente. Verifique se o código informado já não existe.");
+                mostrarToast("Incapaz de registrar cliente. Verifique se o código informado já não existe.", "danger");
                 btn.disabled = false; btn.innerText = "Salvar e Agendar";
                 return;
             }
         } else {
             codFinal = document.getElementById("manualCodigo").value.trim();
             if(!codFinal) {
-                alert("Por favor, busque e selecione um cliente cadastrado da lista.");
+                mostrarToast("Por favor, busque e selecione um cliente cadastrado da lista.", "warning");
                 btn.disabled = false; btn.innerText = "Salvar e Agendar";
                 return;
             }
@@ -344,12 +387,11 @@ async function salvarColetaManual() {
         if(modMan) modMan.hide();
         location.reload();
     } catch (e) {
-        alert("Falha fatal na comunicação com o sistema.");
+        mostrarToast("Falha fatal na comunicação com o sistema.", "danger");
         btn.disabled = false; btn.innerText = "Salvar e Agendar";
     }
 }
 
-// SALVAR EDIÇÕES DIRETAS NA TABELA
 async function salvarCampo(id, nomeCampo, inputElement, valorCustomizado = undefined) {
     let valor = valorCustomizado !== undefined ? valorCustomizado : inputElement.value;
     let b = {}; 
@@ -393,7 +435,6 @@ async function confirmarReplicacao() {
     carregarSemana();
 }
 
-// FUNÇÃO DRAG AND DROP CORRIGIDA PARA ATUALIZAR E SALVAR NO SISTEMA IMEDIATAMENTE
 async function drop(e, dia) {
     e.preventDefault();
     const id = e.dataTransfer.getData("text");
@@ -406,9 +447,9 @@ async function drop(e, dia) {
             body: JSON.stringify({ data_coleta: dia }) 
         });
         if(res.ok) {
-            carregarSemana(); // Recarrega a grade com a alteração salva no banco
+            carregarSemana();
         } else {
-            alert("Erro ao salvar nova posição do box no servidor.");
+            mostrarToast("Erro ao salvar nova posição do box no servidor.", "danger");
         }
     } catch(err) {
         console.error("Falha ao mover box:", err);
@@ -416,10 +457,7 @@ async function drop(e, dia) {
 }
 
 async function atualizarDiaFixo(id, valor) {
-    // Coleta todos os checkboxes marcados para este cliente
-    const checkboxes = document.querySelectorAll(
-        `.checkbox-dia-fixo[data-cliente-id="${id}"]:checked`
-    );
+    const checkboxes = document.querySelectorAll(`.checkbox-dia-fixo[data-cliente-id="${id}"]:checked`);
     const diasSelecionados = Array.from(checkboxes).map(cb => cb.value);
     const diaFixoStr = diasSelecionados.join(",");
 
@@ -435,35 +473,23 @@ async function atualizarDiaFixo(id, valor) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-
     document.querySelectorAll(".dias-fixos-dropdown").forEach(dropdown => {
-
         dropdown.addEventListener("hidden.bs.dropdown", async function () {
-
             const clienteId = this.dataset.clienteId;
-
-            const checkboxes = document.querySelectorAll(
-                `.checkbox-dia-fixo[data-cliente-id="${clienteId}"]:checked`
-            );
-
+            const checkboxes = document.querySelectorAll(`.checkbox-dia-fixo[data-cliente-id="${clienteId}"]:checked`);
             const diasSelecionados = Array.from(checkboxes).map(cb => cb.value);
 
             await fetch(`/clientes/${clienteId}/fixar`, {
                 method: "PUT",
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     fixo: diasSelecionados.length > 0,
                     dia_fixo: diasSelecionados.join(",") || null
                 })
             });
-
             carregarSemana();
         });
-
     });
-
 });
 
 async function gerarProgramacao() { 
@@ -472,10 +498,10 @@ async function gerarProgramacao() {
         if(res.ok) {
             location.reload(); 
         } else {
-            alert("Erro ao processar a geração automática das coletas.");
+            mostrarToast("Erro ao processar a geração automática das coletas.", "danger");
         }
     } catch(e) {
-        alert("Erro de comunicação com o servidor.");
+        mostrarToast("Erro de comunicação com o servidor.", "danger");
     }
 }
 
@@ -494,53 +520,67 @@ async function fazerUpload() {
         await fetch("/upload", {method:"POST", body:fd}); 
         location.reload(); 
     } catch(e) { 
-        alert("Erro no envio do arquivo."); 
+        mostrarToast("Erro no envio do arquivo.", "danger"); 
         btn.disabled = false; 
         btn.innerText = "Importar Planilha"; 
     }
 }
 
 async function excluirColeta(id) { 
-    if(confirm("Remover esta coleta da semana?")) { 
+    if (await perguntar("Remover esta coleta da semana?")) { 
         const res = await fetch(`/programacao/${id}`, {method:"DELETE"}); 
-        if(res.ok) { carregarSemana(); } else { alert("Erro ao remover coleta no servidor."); }
+        if(res.ok) { 
+            carregarSemana(); 
+            mostrarToast("Coleta removida com sucesso!", "success");
+        } else { 
+            mostrarToast("Erro ao remover coleta no servidor.", "danger"); 
+        }
     } 
 }
 
 async function excluirCliente(id, event) { 
     if(event) event.stopPropagation();
-    if(confirm("Excluir este cliente definitivamente do Banco de Dados?")) { 
+    if (await perguntar("Excluir este cliente definitivamente do Banco de Dados?")) { 
         const res = await fetch(`/clientes/${id}`, {method:"DELETE"}); 
         if(res.ok) { 
             location.reload(); 
         } else { 
-            alert("Não foi possível excluir. Motivo: Verifique se este cliente possui coletas ativas registradas na grade."); 
+            mostrarToast("Não foi possível excluir. Motivo: Verifique se este cliente possui coletas ativas registradas na grade.", "warning"); 
         }
     } 
 }
 
-// ── CONFIRMAR COLETA ───────────────────────────────────────
+// ── CONFIRMAR COLETA (REESTRUTURADO SEM POPUPS NATIVOS) ────────
 function abrirConfirmar(scheduleId, diaIso) {
-    const dataFormatada = diaIso; // YYYY-MM-DD
-    const confirmou = confirm(
-        `Confirmar coleta realizada em ${diaIso.split('-').reverse().join('/')}?\n\nClique OK para confirmar ou Cancelar para informar outra data.`
-    );
-
-    if (confirmou) {
-        salvarConfirmacao(scheduleId, dataFormatada);
-    } else {
-        const novaData = prompt(
-            "Informe a data real da coleta (DD/MM/AAAA):",
-            diaIso.split('-').reverse().join('/')
-        );
-        if (!novaData) return;
-
-        // Converte DD/MM/AAAA para YYYY-MM-DD
-        const partes = novaData.split('/');
-        if (partes.length !== 3) return alert("Data inválida.");
-        const dataConvertida = `${partes[2]}-${partes[1]}-${partes[0]}`;
-        salvarConfirmacao(scheduleId, dataConvertida);
-    }
+    const partes = diaIso.split('-');
+    const dataBrPadrao = `${partes[2]}/${partes[1]}/${partes[0]}`;
+    
+    const input = document.getElementById('inputDataRealColeta');
+    input.value = dataBrPadrao;
+    
+    const modalEl = document.getElementById('modalConfirmarColeta');
+    const modal = new bootstrap.Modal(modalEl);
+    const btnSalvar = document.getElementById('btnSalvarDataReal');
+    
+    const novoBtn = btnSalvar.cloneNode(true);
+    btnSalvar.parentNode.replaceChild(novoBtn, btnSalvar);
+    
+    novoBtn.addEventListener('click', async () => {
+        const novaData = input.value.trim();
+        if (!novaData) return mostrarToast("Por favor, preencha a data.", "warning");
+        
+        const partesNova = novaData.split('/');
+        if (partesNova.length !== 3) {
+            mostrarToast("Data inválida. Use o formato DD/MM/AAAA.", "warning");
+            return;
+        }
+        
+        const dataConvertida = `${partesNova[2]}-${partesNova[1]}-${partesNova[0]}`;
+        modal.hide();
+        await salvarConfirmacao(scheduleId, dataConvertida);
+    });
+    
+    modal.show();
 }
 
 async function salvarConfirmacao(scheduleId, dataIso) {
@@ -550,6 +590,10 @@ async function salvarConfirmacao(scheduleId, dataIso) {
         body: JSON.stringify({ data_realizada: dataIso })
     });
     const data = await res.json();
-    if (data.erro) return alert(data.erro);
+    if (data.erro) {
+        mostrarToast(data.erro, "danger");
+        return;
+    }
+    mostrarToast("Coleta confirmada com sucesso!", "success");
     await carregarSemana();
 }
