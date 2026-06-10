@@ -14,7 +14,6 @@ DIAS_SEMANA = {
     6: "Domingo",
 }
 
-# Criamos o dicionário reverso totalmente em minúsculo para ignorar erros de digitação
 DIAS_SEMANA_REVERSO = {v.lower(): k for k, v in DIAS_SEMANA.items()}
 
 
@@ -28,7 +27,6 @@ def proxima_data_para_dia(dia_nome: str, segunda: date) -> date:
     nome_limpo = dia_nome.strip().lower()
     offset = DIAS_SEMANA_REVERSO.get(nome_limpo)
     
-    # Se não for um dia válido (ex: texto "Por solicitação" jogado no campo errado), retorna None
     if offset is None:
         return None
         
@@ -36,17 +34,50 @@ def proxima_data_para_dia(dia_nome: str, segunda: date) -> date:
 
 
 def ja_agendado_na_data(db: Session, codigo: str, data: date) -> bool:
-    """Verifica duplicidade limpando espaços, tratando zeros à esquerda e isolando apenas a DATA."""
+    """TRAVA PARA FIXOS: Garante que o mesmo cliente não tenha duas coletas no MESMO DIA."""
     cod_limpo = str(codigo).strip()
-    # Cria uma variação sem zeros à esquerda se for numérico (ex: "015" vira "15")
     cod_alternativo = str(int(cod_limpo)) if cod_limpo.isdigit() else cod_limpo
 
+    # 1. Checa na memória local (fila do commit atual)
+    for obj in db.new:
+        if isinstance(obj, Schedule):
+            obj_cod = str(obj.codigo_cliente).strip()
+            if obj_cod in (cod_limpo, cod_alternativo) and obj.data_coleta == data:
+                return True
+
+    # 2. Checa no Banco de Dados
     existente = db.query(Schedule).filter(
         or_(
             Schedule.codigo_cliente == cod_limpo,
             Schedule.codigo_cliente == cod_alternativo
         ),
-        func.date(Schedule.data_coleta) == data  # func.date ignora componentes de hora/timestamp do banco
+        func.date(Schedule.data_coleta) == data
+    ).first()
+    
+    return existente is not None
+
+
+def ja_agendado_na_semana(db: Session, codigo: str, data_inicio: date, data_fim: date) -> bool:
+    """TRAVA PARA NORMAIS: Garante que o cliente só tenha UMA coleta AUTOMÁTICA na semana inteira."""
+    cod_limpo = str(codigo).strip()
+    cod_alternativo = str(int(cod_limpo)) if cod_limpo.isdigit() else cod_limpo
+
+    # 1. Checa na memória local (previne duplicar se clicar no botão duas vezes seguidas)
+    for obj in db.new:
+        if isinstance(obj, Schedule):
+            obj_cod = str(obj.codigo_cliente).strip()
+            if obj_cod in (cod_limpo, cod_alternativo):
+                if data_inicio <= obj.data_coleta <= data_fim:
+                    return True
+
+    # 2. Checa no Banco de Dados (bloqueia se já foi gerado antes ou inserido manualmente)
+    existente = db.query(Schedule).filter(
+        or_(
+            Schedule.codigo_cliente == cod_limpo,
+            Schedule.codigo_cliente == cod_alternativo
+        ),
+        func.date(Schedule.data_coleta) >= data_inicio,
+        func.date(Schedule.data_coleta) <= data_fim
     ).first()
     
     return existente is not None
@@ -54,7 +85,7 @@ def ja_agendado_na_data(db: Session, codigo: str, data: date) -> bool:
 
 def gerar_programacao(db: Session) -> dict:
     """
-    Gera a programação da próxima semana de forma blindada.
+    Gera a programação da próxima semana sem duplicar clientes normais na mesma semana.
     """
     clientes = db.query(Client).all()
 
@@ -64,6 +95,8 @@ def gerar_programacao(db: Session) -> dict:
     hoje = date.today()
     dias_ate_segunda = (7 - hoje.weekday()) % 7 or 7
     segunda = hoje + timedelta(days=dias_ate_segunda)
+    domingo = segunda + timedelta(days=6)  # Define o limite do final da semana alvo
+    
     dias_semana = [segunda + timedelta(days=i) for i in range(5)]
 
     gerados = 0
@@ -72,23 +105,21 @@ def gerar_programacao(db: Session) -> dict:
     solicitacao = 0
 
     for cliente in clientes:
-
-        # ── BLINDAGEM 1: Checagem ultra-segura de "Por Solicitação" (com ou sem acento)
+        # ── BLINDAGEM 1: Checagem de "Por Solicitação" (Alvo curto para evitar erros de digitação)
         obs_texto = (cliente.observacao or "").lower()
         dia_fixo_texto = (cliente.dia_fixo or "").lower()
         
-        if "solicita" in obs_texto or "solicita" in dia_fixo_texto:
+        if "solicit" in obs_texto or "solicit" in dia_fixo_texto:
             solicitacao += 1
             continue
 
-        # Cliente fixo — aceita múltiplos dias separados por vírgula
+        # ── CLIENTE FIXO: Pode ter mais de uma na semana, mas não no mesmo dia
         if cliente.fixo and cliente.dia_fixo:
             dias_fixos = [d.strip() for d in cliente.dia_fixo.split(",")]
 
             for dia_nome in dias_fixos:
                 data_coleta = proxima_data_para_dia(dia_nome, segunda)
 
-                # Se o texto do dia for inválido, ignora para não agendar na segunda por erro
                 if data_coleta is None:
                     continue
 
@@ -108,11 +139,9 @@ def gerar_programacao(db: Session) -> dict:
                 db.add(schedule)
                 gerados += 1
 
-        # Cliente normal — ultima_coleta + frequencia_dias
+        # ── CLIENTE NORMAL: Máximo de UMA coleta automática por semana
         elif cliente.ultima_coleta and cliente.frequencia_dias:
-            data_coleta = cliente.ultima_coleta + timedelta(
-                days=cliente.frequencia_dias
-            )
+            data_coleta = cliente.ultima_coleta + timedelta(days=cliente.frequencia_dias)
             data_coleta = ajustar_para_dia_util(data_coleta)
             dia_semana = DIAS_SEMANA.get(data_coleta.weekday(), "Segunda")
 
@@ -120,7 +149,8 @@ def gerar_programacao(db: Session) -> dict:
                 ignorados += 1
                 continue
 
-            if ja_agendado_na_data(db, cliente.codigo, data_coleta):
+            # 🚨 AQUI ESTÁ A MUDANÇA: Verifica se o cliente já tem QUALQUER coleta entre segunda e domingo
+            if ja_agendado_na_semana(db, cliente.codigo, segunda, domingo):
                 duplicados += 1
                 continue
 
