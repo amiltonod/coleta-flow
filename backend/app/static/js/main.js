@@ -1,7 +1,7 @@
 const DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
 let datasSemana = [];
 let modMan, modRep;
-let offsetSemana = 0; // 0=próxima, -1=atual, -2=anterior
+let offsetSemana = parseInt(localStorage.getItem("offsetSemana")) || 0; // 0=próxima, -1=atual, -2=anterior
 
 
 
@@ -142,7 +142,10 @@ async function processarDataExibicao(input, id) {
 }
 
 async function carregarSemana(offset = null) {
-    if (offset !== null) offsetSemana = offset;
+    if (offset !== null) {
+        offsetSemana = offset;
+        localStorage.setItem("offsetSemana", offsetSemana); // Salva a semana atual no navegador
+    }
     try {
         const res = await fetch(`/programacao-semana?offset=${offsetSemana}`);
         const data = await res.json();
