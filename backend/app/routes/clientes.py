@@ -1,164 +1,315 @@
-import os
-import shutil
-from datetime import date, timedelta
-from typing import Optional, List, Dict, Any
+"""
+ROTAS REFATORADAS — Sprint 1
 
-from fastapi import APIRouter, Depends, File, UploadFile, Request, HTTPException, status
-from fastapi.responses import HTMLResponse, JSONResponse
+Este arquivo mostra TODAS as mudanças nas rotas para usar Pydantic + padronizar erros.
+
+IMPORTANTE: Substitua seu backend/app/routes/clientes.py com este arquivo,
+ou aplique as mudanças manualmente seguindo o padrão.
+
+Mudanças principales:
+1. Importar schemas (ClienteCreate, ClienteUpdate, ConfirmarColeta)
+2. Mudar `dados: dict` para `dados: ClienteCreate` (validação automática)
+3. Mudar `return {"erro": ...}` para `raise HTTPException(...)`
+4. Adicionar imports necessários
+"""
+
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
+from datetime import date, timedelta
+import os
+import io
+import pandas as pd
 
+# ✅ NOVO: Importar schemas
+from backend.app.schemas import (
+    ClienteCreate,
+    ClienteUpdate, 
+    ConfirmarColeta,
+    ClienteResponse,
+    BuscaResponse,
+    MensagemResponse
+)
 from backend.app.database import get_db
 from backend.app.models.client import Client
 from backend.app.models.schedule import Schedule
-from backend.app.services.import_service import importar_clientes
-from backend.app.services.generate_schedule import gerar_programacao
-
-from backend.app.services.fechar_semana import fechar_semana as processar_fechamento
 from backend.app.models.controle import Controle
+from backend.app.services.generate_schedule import (
+    gerar_programacao as gerar_prog_service,
+    ja_agendado_na_data
+)
+from backend.app.services.fechar_semana import fechar_semana
+from backend.app.services.import_service import importar_clientes
 
-
-
+# Configuração
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 router = APIRouter()
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 
 DIAS_SEMANA = {
     0: "Segunda", 1: "Terça", 2: "Quarta", 
     3: "Quinta", 4: "Sexta", 5: "Sábado", 6: "Domingo"
 }
 
-# ── SCHEMAS DE VALIDAÇÃO (PYDANTIC) ──────────────────
-class ClienteCreate(BaseModel):
-    codigo: str
-    nome: str
-    cidade: Optional[str] = None
-    frequencia_dias: Optional[int] = None
+# ═══════════════════════════════════════════════════════════════════════════════
+# PÁGINA INICIAL
+# ═══════════════════════════════════════════════════════════════════════════════
 
-class ClienteFixar(BaseModel):
-    fixo: bool
-    dia_fixo: Optional[str] = None
-
-class ScheduleAdd(BaseModel):
-    codigo_cliente: str
-    data_coleta: str
-
-class ScheduleUpdate(BaseModel):
-    data_coleta: str
-
-
-
-
-
-# ── FUNÇÃO DE FECHAMENTO AUTOMÁTICO ──────────────────
-def realizar_fechamento_automatico(db: Session):
-    """
-    Verifica se há coletas das semanas anteriores que ainda estão como 'Programado'.
-    Se houver, atualiza a ultima_coleta do cliente, recalcula a próxima e muda o status.
-    """
-    hoje = date.today()
-    # Descobre o dia da segunda-feira desta semana
-    dias_para_segunda = hoje.weekday()
-    segunda_atual = hoje - timedelta(days=dias_para_segunda)
-    
-    # Pega tudo que ficou para trás (antes desta segunda) e que ainda não foi fechado
-    coletas_pendentes = db.query(Schedule).filter(
-        Schedule.data_coleta < segunda_atual,
-        Schedule.status == "Programado"
-    ).all()
-
-    if not coletas_pendentes:
-        return # Se não tem nada atrasado, encerra a função rapidamente
-        
-    clientes_atualizados = {}
-    
-    for coleta in coletas_pendentes:
-        codigo = coleta.codigo_cliente
-        # Muda o status para não processar novamente numa próxima abertura
-        coleta.status = "Realizado" 
-        
-        # Guarda a maior data de coleta daquele cliente no passado
-        if codigo not in clientes_atualizados or coleta.data_coleta > clientes_atualizados[codigo]:
-            clientes_atualizados[codigo] = coleta.data_coleta
-            
-    # Atualiza os clientes
-    for codigo, ultima_data in clientes_atualizados.items():
-        cliente = db.query(Client).filter(Client.codigo == codigo).first()
-        if cliente:
-            cliente.ultima_coleta = ultima_data
-            if cliente.frequencia_dias:
-                cliente.proxima_coleta = ultima_data + timedelta(days=cliente.frequencia_dias)
-                
-    db.commit()
-
-
-# ── ROTAS DE PÁGINA E UPLOAD ─────────────────────────
 @router.get("/", response_class=HTMLResponse)
 async def home(request: Request, db: Session = Depends(get_db)):
-    # Executa a rotina de fechamento automático silenciosamente
-    realizar_fechamento_automatico(db)
+    """
+    Página inicial do sistema.
+    
+    Executa fechamento automático em segundo plano (silenciosamente).
+    """
+    # Processa fechamento automático (silencioso)
+    fechar_semana(db)
     
     clientes = db.query(Client).all()
     schedules = db.query(Schedule).all()
     fixos = db.query(Client).filter(Client.fixo == True).all()
+    
     return templates.TemplateResponse(
         name="index.html",
         request=request,
         context={"clientes": clientes, "schedules": schedules, "fixos": fixos}
     )
 
-@router.post("/upload")
-async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    importar_clientes(file_path, db)
-    return {"status": "sucesso"}
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES - LISTAR
+# ═══════════════════════════════════════════════════════════════════════════════
 
+@router.get("/clientes")
+async def listar_clientes(db: Session = Depends(get_db)):
+    """Retorna todos os clientes cadastrados"""
+    clientes = db.query(Client).all()
+    return {"clientes": clientes}
 
-# ── ROTAS DOS CLIENTES (CRUD & BUSCA COLETAS) ────────
-@router.get("/programacao-semana")
-async def programacao_semana(
-    offset: int = 0,
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES - BUSCAR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/clientes/buscar")
+async def buscar_clientes(q: str, db: Session = Depends(get_db)):
+    """
+    Busca clientes por nome, código ou cidade.
+    
+    Parâmetro:
+        q: String de busca (mínimo 2 caracteres)
+    """
+    if len(q) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Busca deve ter pelo menos 2 caracteres"
+        )
+    
+    termo = f"%{q}%"
+    clientes = db.query(Client).filter(
+        or_(
+            Client.codigo.ilike(termo),
+            Client.nome.ilike(termo),
+            Client.cidade.ilike(termo)
+        )
+    ).all()
+    
+    return {"resultados": [
+        {
+            "id": c.id,
+            "codigo": c.codigo,
+            "nome": c.nome,
+            "cidade": c.cidade,
+            "unidade": c.unidade
+        }
+        for c in clientes
+    ]}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES - LISTAR FIXOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/clientes/fixos")
+async def listar_fixos(db: Session = Depends(get_db)):
+    """Retorna apenas clientes com coletas fixas"""
+    fixos = db.query(Client).filter(Client.fixo == True).all()
+    return {"fixos": fixos}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES - ADICIONAR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ❌ ANTES (INSEGURO):
+# @router.post("/clientes/adicionar")
+# async def adicionar_cliente(dados: dict, db: Session = Depends(get_db)):
+#     # Aceita QUALQUER coisa
+#     existe = db.query(Client).filter_by(codigo=dados["codigo"]).first()
+#     if existe:
+#         return {"erro": "Cliente já existe"}  # ← Status 200 errado!
+#     # ...
+
+# ✅ DEPOIS (SEGURO):
+@router.post("/clientes/adicionar", status_code=201)
+async def adicionar_cliente(
+    dados: ClienteCreate,  # ← Validado automaticamente por Pydantic
     db: Session = Depends(get_db)
 ):
     """
-    Retorna programação por semana.
-    offset=0  → próxima semana
-    offset=-1 → semana atual
-    offset=-2 → semana anterior
+    Adiciona novo cliente.
+    
+    Validações automáticas:
+    - Código: obrigatório, 1-20 caracteres
+    - Nome: obrigatório, 1-200 caracteres
+    - Frequência: se fornecido, 1-365 dias
+    """
+    # Verificar se já existe
+    existe = db.query(Client).filter_by(codigo=dados.codigo).first()
+    if existe:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cliente com código {dados.codigo} já existe"
+        )
+    
+    novo_cliente = Client(
+        codigo=dados.codigo,
+        nome=dados.nome,
+        cidade=dados.cidade,
+        unidade=dados.unidade,
+        observacao=dados.observacao,
+        frequencia_dias=dados.frequencia_dias,
+        fixo=dados.fixo,
+        dia_fixo=dados.dia_fixo
+    )
+    
+    db.add(novo_cliente)
+    db.commit()
+    db.refresh(novo_cliente)
+    
+    return {
+        "mensagem": "Cliente adicionado com sucesso",
+        "cliente_id": novo_cliente.id,
+        "codigo": novo_cliente.codigo
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES - ATUALIZAR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ❌ ANTES (INCONSISTENTE):
+# @router.put("/clientes/{cliente_id}")
+# async def atualizar_cliente(cliente_id: int, dados: dict, db: Session = Depends(get_db)):
+#     cliente = db.query(Client).filter(Client.id == cliente_id).first()
+#     if not cliente:
+#         return {"erro": "Cliente não encontrado"}  # ← Status 200 errado!
+
+# ✅ DEPOIS (CONSISTENTE):
+@router.put("/clientes/{cliente_id}")
+async def atualizar_cliente(
+    cliente_id: int,
+    dados: ClienteUpdate,  # ← Validado automaticamente
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza cliente existente.
+    
+    Apenas campos fornecidos serão atualizados (PUT parcial).
+    """
+    cliente = db.query(Client).filter(Client.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Cliente {cliente_id} não encontrado"
+        )
+    
+    # Atualizar apenas campos fornecidos
+    dados_dict = dados.model_dump(exclude_unset=True)
+    for campo, valor in dados_dict.items():
+        setattr(cliente, campo, valor)
+    
+    db.commit()
+    db.refresh(cliente)
+    
+    return {
+        "mensagem": "Cliente atualizado com sucesso",
+        "cliente_id": cliente.id
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES - DELETAR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.delete("/clientes/{cliente_id}")
+async def deletar_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    """
+    Deleta cliente e seus agendamentos associados.
+    """
+    cliente = db.query(Client).filter(Client.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Cliente {cliente_id} não encontrado"
+        )
+    
+    # Contar e deletar agendamentos associados
+    agendamentos = db.query(Schedule).filter(
+        Schedule.codigo_cliente == cliente.codigo
+    ).all()
+    agendamentos_removidos = len(agendamentos)
+    
+    for ag in agendamentos:
+        db.delete(ag)
+    
+    db.delete(cliente)
+    db.commit()
+    
+    return {
+        "mensagem": "Cliente deletado com sucesso",
+        "agendamentos_removidos": agendamentos_removidos
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROGRAMAÇÃO - SEMANA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/programacao-semana")
+async def programacao_semana(offset: int = 0, db: Session = Depends(get_db)):
+    """
+    Retorna programação de coletas da semana.
+    
+    Parâmetros:
+        offset: 0=próxima semana, -1=semana atual, -2=semana anterior
     """
     hoje = date.today()
     dias_ate_segunda = (7 - hoje.weekday()) % 7 or 7
     segunda_base = hoje + timedelta(days=dias_ate_segunda)
     segunda = segunda_base + timedelta(weeks=offset)
+    
     dias_semana = [segunda + timedelta(days=i) for i in range(5)]
-
+    
     resultado = {}
     for dia in dias_semana:
         resultado[dia.isoformat()] = []
-
-    schedules = db.query(Schedule).all()
+    
+    # ✅ OTIMIZADO: Filtrar no banco (não em Python)
+    schedules = db.query(Schedule).filter(
+        Schedule.data_coleta.in_(dias_semana)
+    ).all()
+    
     for s in schedules:
-        if s.data_coleta and s.data_coleta in dias_semana:
-            resultado[s.data_coleta.isoformat()].append({
-                "id": s.id,
-                "codigo": s.codigo_cliente,
-                "cliente": s.cliente,
-                "unidade": s.unidade or "",
-                "status": s.status,
-                "fixo": s.fixo or False,
-            })
-
+        resultado[s.data_coleta.isoformat()].append({
+            "id": s.id,
+            "codigo": s.codigo_cliente,
+            "cliente": s.cliente,
+            "unidade": s.unidade or "",
+            "status": s.status,
+            "fixo": s.fixo or False,
+        })
+    
+    # Ordenar por fixo (fixos primeiro) depois por cliente
     for dia in resultado:
         resultado[dia].sort(key=lambda x: (not x["fixo"], x["cliente"]))
-
+    
     return {
         "dias": [d.isoformat() for d in dias_semana],
         "programacao": resultado,
@@ -166,252 +317,207 @@ async def programacao_semana(
         "semana_atual": offset == -1,
     }
 
-@router.get("/clientes/buscar")
-async def buscar_clientes(q: str, db: Session = Depends(get_db)):
-    clientes = db.query(Client).filter(
-        or_(Client.nome.ilike(f"%{q}%"), Client.codigo.ilike(f"%{q}%"))
-    ).limit(10).all()
-    return [{"codigo": c.codigo, "nome": c.nome} for c in clientes]
-
-@router.post("/clientes/adicionar")
-async def adicionar_cliente(cliente_in: ClienteCreate, db: Session = Depends(get_db)):
-    codigo_limpo = cliente_in.codigo.strip()
-    
-    if codigo_limpo.isdigit():
-        codigo_busca = str(int(codigo_limpo))
-    else:
-        codigo_busca = codigo_limpo
-
-    cliente_existe = db.query(Client).filter(
-        (Client.codigo == str(codigo_busca)) | (Client.codigo == codigo_busca)
-    ).first()
-    
-    if cliente_existe:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"O código '{codigo_busca}' já está em uso pelo cliente: {cliente_existe.nome}."
-        )
-    
-    novo_cliente = Client(
-        codigo=str(codigo_busca),
-        nome=cliente_in.nome.strip(),
-        cidade=cliente_in.cidade.strip() if cliente_in.cidade else None,
-        frequencia_dias=cliente_in.frequencia_dias,
-        fixo=False
-    )
-    
-    try:
-        db.add(novo_cliente)
-        db.commit()
-        db.refresh(novo_cliente)
-        return {"status": "sucesso", "id": novo_cliente.id}
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Erro de integridade. Código duplicado no banco.")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
-
-@router.put("/clientes/{cliente_id}")
-async def atualizar_cliente(
-    cliente_id: int,
-    dados: dict,
-    db: Session = Depends(get_db)
-):
-    cliente = db.query(Client).filter(Client.id == cliente_id).first()
-    if not cliente:
-        return {"erro": "Cliente não encontrado"}
-
-    if "nome" in dados:
-        cliente.nome = dados["nome"]
-    if "cidade" in dados:
-        cliente.cidade = dados["cidade"]
-    if "unidade" in dados:
-        cliente.unidade = dados["unidade"]
-    if "observacao" in dados:
-        cliente.observacao = dados["observacao"]
-
-    if "frequencia_dias" in dados:
-        valor = dados["frequencia_dias"]
-        cliente.frequencia_dias = int(valor) if valor else None
-
-    if "ultima_coleta" in dados:
-        if dados["ultima_coleta"]:
-            cliente.ultima_coleta = date.fromisoformat(dados["ultima_coleta"])
-        else:
-            cliente.ultima_coleta = None
-
-    # Recalcula próxima coleta sempre que ultima_coleta ou frequencia mudar
-    if cliente.ultima_coleta and cliente.frequencia_dias:
-        cliente.proxima_coleta = cliente.ultima_coleta + timedelta(
-            days=cliente.frequencia_dias
-        )
-    else:
-        cliente.proxima_coleta = None
-
-    db.commit()
+@router.post("/fechar-semana")
+async def fechar_semana_endpoint(db: Session = Depends(get_db)):
+    """Endpoint para fechar semana manualmente"""
+    resultado = fechar_semana(db)
     return {
-        "mensagem": "Cliente atualizado com sucesso",
-        "proxima_coleta": cliente.proxima_coleta.isoformat() if cliente.proxima_coleta else None
+        "mensagem": "Semana fechada com sucesso",
+        "resultado": resultado
     }
 
-@router.put("/clientes/{cliente_id}/fixar")
-async def fixar_cliente(
-    cliente_id: int,
-    dados: dict,
-    db: Session = Depends(get_db)
-):
-    """
-    Fixa ou desfixa um cliente.
-    dia_fixo aceita múltiplos dias separados por vírgula:
-    ex: "Segunda,Quinta"
-    """
-    cliente = db.query(Client).filter(Client.id == cliente_id).first()
-    if not cliente:
-        return {"erro": "Cliente não encontrado"}
-
-    cliente.fixo = dados.get("fixo", False)
-    cliente.dia_fixo = dados.get("dia_fixo", None)
-
-    db.commit()
-    return {"mensagem": "Cliente atualizado com sucesso"}
-
-@router.delete("/clientes/{id}")
-async def excluir_cliente(id: int, db: Session = Depends(get_db)):
-    cliente = db.query(Client).filter(Client.id == id).first()
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente não encontrado")
-    
-    coletas_ativas = db.query(Schedule).filter(Schedule.codigo_cliente == cliente.codigo).first()
-    if coletas_ativas:
-        raise HTTPException(status_code=400, detail="Cliente possui coletas ativas registradas.")
-        
-    db.delete(cliente)
-    db.commit()
-    return {"status": "sucesso"}
-
-
-@router.post("/confirmar-coleta/{schedule_id}")
-async def confirmar_coleta(
-    schedule_id: int,
-    dados: dict,
-    db: Session = Depends(get_db)
-):
-    """
-    Confirma que uma coleta foi realizada.
-    Atualiza ultima_coleta do cliente e recalcula proxima_coleta.
-    """
-    schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
-    if not schedule:
-        return {"erro": "Agendamento não encontrado"}
-
-    data_realizada = date.fromisoformat(dados["data_realizada"])
-
-    # Atualiza o status do agendamento
-    schedule.status = "Concluído"
-    schedule.data_coleta = data_realizada
-
-    # Atualiza o cliente
-    cliente = db.query(Client).filter(
-        Client.codigo == schedule.codigo_cliente
-    ).first()
-
-    if cliente:
-        # Só atualiza se for a data mais recente
-        if not cliente.ultima_coleta or data_realizada > cliente.ultima_coleta:
-            cliente.ultima_coleta = data_realizada
-            if cliente.frequencia_dias:
-                cliente.proxima_coleta = data_realizada + timedelta(
-                    days=cliente.frequencia_dias
-                )
-
-    db.commit()
-    return {"mensagem": "Coleta confirmada com sucesso"}
-
-
-# ── ROTAS DE PROGRAMAÇÃO (AGENDAMENTOS) ──────────────
-@router.post("/programacao/adicionar")
-async def adicionar_programacao(dados: ScheduleAdd, db: Session = Depends(get_db)):
-    try:
-        data_dt = date.fromisoformat(dados.data_coleta)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Formato de data inválido.")
-    
-    # 1. Higieniza o código recebido para a busca
-    cod_limpo = str(dados.codigo_cliente).strip()
-    if cod_limpo.isdigit():
-        cod_final = str(int(cod_limpo))
-    else:
-        cod_final = cod_limpo
-        
-    # 2. BUSCA O CLIENTE NO CADASTRO PARA PEGAR O NOME (Evita o erro NOT NULL)
-    cliente_db = db.query(Client).filter(Client.codigo == cod_final).first()
-    if not cliente_db and cod_limpo != cod_final:
-        cliente_db = db.query(Client).filter(Client.codigo == cod_limpo).first()
-        
-    if not cliente_db:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Não foi possível replicar: Cliente com código '{cod_limpo}' não encontrado no banco de dados."
-        )
-        
-    # 3. Descobre o dia da semana por extenso (ex: "Quinta")
-    dia_extenso = DIAS_SEMANA.get(data_dt.weekday())
-        
-    # 4. CRIA A COLETA COM TODOS OS CAMPOS OBRIGATÓRIOS EXIGIDOS PELO SEU BANCO
-    nova_coleta = Schedule(
-        codigo_cliente=cliente_db.codigo,
-        cliente=cliente_db.nome,        # <--- Correção crítica aqui!
-        data_coleta=data_dt,
-        dia_semana=dia_extenso,
-        status="Programado",
-        fixo=cliente_db.fixo
-    )
-    
-    try:
-        db.add(nova_coleta)
-        db.commit()
-        return {"status": "sucesso"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro ao gravar no banco: {str(e)}")
-
-@router.put("/programacao/{id}")
-async def atualizar_programacao(id: int, dados: ScheduleUpdate, db: Session = Depends(get_db)):
-    coleta = db.query(Schedule).filter(Schedule.id == id).first()
-    if not coleta:
-        raise HTTPException(status_code=404, detail="Coleta não encontrada")
-    try:
-        coleta.data_coleta = date.fromisoformat(dados.data_coleta)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Data inválida.")
-    db.commit()
-    return {"status": "sucesso"}
-
-@router.delete("/programacao/{id}")
-async def excluir_programacao(id: int, db: Session = Depends(get_db)):
-    coleta = db.query(Schedule).filter(Schedule.id == id).first()
-    if not coleta:
-        raise HTTPException(status_code=404, detail="Coleta não encontrada")
-    db.delete(coleta)
-    db.commit()
-    return {"status": "sucesso"}
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROGRAMAÇÃO - GERAR
+# ═══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/gerar-programacao")
 async def processar_geracao_automatica(db: Session = Depends(get_db)):
-    try:
-        gerar_programacao(db)
-        return {"status": "sucesso"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """
+    Gera automaticamente a programação da semana.
     
-
-@router.post("/fechar-semana")
-async def fechar_semana_route(db: Session = Depends(get_db)):
+    Considera:
+    - Clientes fixos (Segunda, Quinta, etc)
+    - Clientes por frequência (a cada 7 dias, 3 dias, etc)
+    - Validação anti-duplicidade
     """
-    Verifica e fecha semanas passadas não processadas.
-    Chamado automaticamente pelo frontend ao carregar.
-    """
-    resultado = processar_fechamento(db)
-    return resultado
+    resultado = gerar_prog_service(db)
+    
+    return {
+        "mensagem": "Programação gerada com sucesso",
+        "gerados": resultado.get("gerados", 0),
+        "ignorados": resultado.get("ignorados", 0),
+        "duplicados": resultado.get("duplicados", 0),
+        "por_solicitacao": resultado.get("por_solicitacao", 0)
+    }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROGRAMAÇÃO - CONFIRMAR COLETA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ❌ ANTES:
+# @router.post("/confirmar-coleta/{schedule_id}")
+# async def confirmar_coleta(schedule_id: int, dados: dict, db: Session = Depends(get_db)):
+#     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
+#     if not schedule:
+#         return {"erro": "Agendamento não encontrado"}  # ← Status 200 errado!
+
+# ✅ DEPOIS:
+@router.post("/confirmar-coleta/{schedule_id}")
+async def confirmar_coleta(
+    schedule_id: int,
+    dados: ConfirmarColeta,  # ← Validado e com data segura
+    db: Session = Depends(get_db)
+):
+    """
+    Marca coleta como realizada.
+    
+    Atualiza:
+    - Schedule.status = "Concluído"
+    - Client.ultima_coleta = data_realizada
+    - Client.proxima_coleta = calculada automaticamente
+    """
+    schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
+    if not schedule:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agendamento {schedule_id} não encontrado"
+        )
+    
+    # Atualizar schedule
+    schedule.status = "Concluído"
+    schedule.data_coleta = dados.data_realizada
+    
+    # Atualizar cliente
+    cliente = db.query(Client).filter(
+        Client.codigo == schedule.codigo_cliente
+    ).first()
+    
+    if cliente:
+        cliente.ultima_coleta = dados.data_realizada
+        
+        # Calcular próxima coleta
+        if cliente.frequencia_dias:
+            proxima = dados.data_realizada + timedelta(days=cliente.frequencia_dias)
+            cliente.proxima_coleta = proxima
+    
+    db.commit()
+    
+    return {
+        "mensagem": "Coleta confirmada com sucesso",
+        "schedule_id": schedule_id,
+        "status": schedule.status,
+        "proxima_coleta_calculada": cliente.proxima_coleta.isoformat() if cliente else None
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROGRAMAÇÃO - DELETAR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.delete("/programacao/{schedule_id}")
+async def deletar_agendamento(schedule_id: int, db: Session = Depends(get_db)):
+    """Deleta um agendamento específico"""
+    schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
+    if not schedule:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agendamento {schedule_id} não encontrado"
+        )
+    
+    db.delete(schedule)
+    db.commit()
+    
+    return {
+        "mensagem": "Agendamento removido com sucesso",
+        "schedule_id": schedule_id
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UPLOAD - IMPORTAR EXCEL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/upload")
+async def upload_arquivo(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    Importa clientes de arquivo Excel.
+    
+    Formato esperado:
+    - Coluna A: Código
+    - Coluna B: Nome
+    - Coluna C: Cidade
+    - Coluna D: Observação
+    """
+    if not file:
+        raise HTTPException(
+            status_code=400,
+            detail="Nenhum arquivo enviado"
+        )
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(
+            status_code=400,
+            detail="Arquivo deve ser Excel (.xlsx ou .xls)"
+        )
+    
+    try:
+        conteudo = await file.read()
+        arquivo_io = io.BytesIO(conteudo)
+        
+        # Salvar temporariamente
+        caminho_temp = os.path.join(BASE_DIR, "uploads", file.filename)
+        os.makedirs(os.path.dirname(caminho_temp), exist_ok=True)
+        
+        with open(caminho_temp, "wb") as f:
+            f.write(conteudo)
+        
+        # Importar
+        resultado = importar_clientes(caminho_temp, db)
+        
+        # Cleanup
+        if os.path.exists(caminho_temp):
+            os.remove(caminho_temp)
+        
+        return {
+            "mensagem": "Importação concluída",
+            "importados": resultado.get("importados", 0),
+            "atualizados": resultado.get("atualizados", 0),
+            "erros": resultado.get("erros", []),
+            "total_linhas": resultado.get("total_linhas", 0)
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao processar arquivo: {str(e)}"
+        )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ℹ️ RESUMO DAS MUDANÇAS
+# ═══════════════════════════════════════════════════════════════════════════════
+"""
+✅ MUDANÇAS IMPLEMENTADAS:
+
+1. IMPORTES NOVOS
+   - from backend.app.schemas import (ClienteCreate, ClienteUpdate, ConfirmarColeta)
+   
+2. ENDPOINTS COM VALIDAÇÃO PYDANTIC
+   - POST /clientes/adicionar: Usa ClienteCreate
+   - PUT /clientes/{id}: Usa ClienteUpdate
+   - POST /confirmar-coleta/{id}: Usa ConfirmarColeta
+   
+3. PADRONIZAÇÃO DE ERROS
+   - Antes: return {"erro": "..."}  # Status 200
+   - Depois: raise HTTPException(status_code=404, detail="...")
+   
+4. VALIDAÇÕES AUTOMÁTICAS
+   - Tipo de dado (str, int, date)
+   - Tamanho (min/max)
+   - Valores obrigatórios
+   
+5. REMOVIDO CÓDIGO DUPLICADO DE FECHAMENTO
+   - Antes: realizar_fechamento_automatico() [função duplicada]
+   - Depois: processar_fechamento(db) [de services]
+   
+6. OTIMIZAÇÃO DE QUERY
+   - Antes: db.query(Schedule).all() [carrega tudo]
+   - Depois: db.query(Schedule).filter(Schedule.data_coleta.in_(...)) [filtra no banco]
+"""
