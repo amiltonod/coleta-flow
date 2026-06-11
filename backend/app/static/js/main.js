@@ -285,7 +285,8 @@ async function filtrarFornecedores() {
     if(q.length < 2) return lista.style.display = "none";
     
     const res = await fetch(`/clientes/buscar?q=${encodeURIComponent(q)}`);
-    const itens = await res.json();
+    const data = await res.json();
+    const itens = data.resultados;  // ✅ ADICIONE ESTA LINHA
     
     lista.innerHTML = itens.map(i => `
         <div class="list-group-item list-group-item-action py-1 small" 
