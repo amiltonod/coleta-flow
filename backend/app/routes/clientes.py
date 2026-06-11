@@ -521,3 +521,8 @@ async def upload_arquivo(file: UploadFile = File(...), db: Session = Depends(get
    - Antes: db.query(Schedule).all() [carrega tudo]
    - Depois: db.query(Schedule).filter(Schedule.data_coleta.in_(...)) [filtra no banco]
 """
+
+@router.get("/favicon.ico")
+async def favicon():
+    """Ignora requisição de favicon"""
+    return {"detail": "Not implemented"}, 204
