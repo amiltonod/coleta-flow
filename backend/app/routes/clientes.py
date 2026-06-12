@@ -277,25 +277,32 @@ async def programacao_semana(offset: int = 0, db: Session = Depends(get_db)):
     """
     Retorna programação de coletas da semana.
     
+    ✅ OTIMIZADO: Filtra no banco SQL, não em Python
+    
     Parâmetros:
         offset: 0=próxima semana, -1=semana atual, -2=semana anterior
     """
+    
+    # Calcular datas da semana
     hoje = date.today()
     dias_ate_segunda = (7 - hoje.weekday()) % 7 or 7
     segunda_base = hoje + timedelta(days=dias_ate_segunda)
     segunda = segunda_base + timedelta(weeks=offset)
     
+    # Gerar lista de 5 dias (segunda a sexta)
     dias_semana = [segunda + timedelta(days=i) for i in range(5)]
     
+    # Inicializar resultado
     resultado = {}
     for dia in dias_semana:
         resultado[dia.isoformat()] = []
     
-    # ✅ OTIMIZADO: Filtrar no banco (não em Python)
+    # ✅ OTIMIZADO: Filtrar NO BANCO (não em Python)
     schedules = db.query(Schedule).filter(
-        Schedule.data_coleta.in_(dias_semana)
+        Schedule.data_coleta.in_(dias_semana)  # ← SQL WHERE IN (...)
     ).all()
     
+    # Preencher resultado
     for s in schedules:
         resultado[s.data_coleta.isoformat()].append({
             "id": s.id,
