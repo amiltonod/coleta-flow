@@ -4,6 +4,7 @@ from backend.app.database import Base, engine
 from backend.app.models import client, schedule, controle  # ← adiciona controle
 from backend.app.routes.clientes import router as clientes_router
 import os
+import backend.app.logging_config
 
 Base.metadata.create_all(bind=engine)
 

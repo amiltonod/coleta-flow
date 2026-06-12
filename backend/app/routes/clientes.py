@@ -22,6 +22,8 @@ from datetime import date, timedelta
 import os
 import io
 import pandas as pd
+import logging
+logger = logging.getLogger("coleta_flow")
 
 # ✅ NOVO: Importar schemas
 from backend.app.schemas import (
