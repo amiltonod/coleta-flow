@@ -412,11 +412,11 @@ async def confirmar_coleta(
     db.commit()
     
     return {
-        "mensagem": "Coleta confirmada com sucesso",
-        "schedule_id": schedule_id,
-        "status": schedule.status,
-        "proxima_coleta_calculada": cliente.proxima_coleta.isoformat() if cliente else None
-    }
+    "mensagem": "Coleta confirmada com sucesso",
+    "schedule_id": schedule_id,
+    "status": schedule.status,
+    "proxima_coleta_calculada": cliente.proxima_coleta.isoformat() if (cliente and cliente.proxima_coleta) else None
+}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PROGRAMAÇÃO - DELETAR

@@ -8,6 +8,14 @@ Como rodar:
     pytest tests/test_routes_clientes.py::test_listar_clientes -v
 """
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# IMPORTS NECESSÁRIOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Estes imports são necessários para o pytest
+from backend.app.models.client import Client
+from backend.app.models.schedule import Schedule
+
 import pytest
 from datetime import date
 
@@ -295,10 +303,3 @@ class TestFluxoCompleto:
         assert len(response.json()["clientes"]) == 0
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# IMPORTS NECESSÁRIOS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Estes imports são necessários para o pytest
-from backend.app.models.client import Client
-from backend.app.models.schedule import Schedule

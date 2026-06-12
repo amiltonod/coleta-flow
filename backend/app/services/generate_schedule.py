@@ -175,6 +175,6 @@ def gerar_programacao(db: Session) -> dict:
         "gerados": gerados,
         "ignorados": ignorados,
         "duplicados": duplicados,
-        "solicitacao": solicitacao,
+        "por_solicitacao": solicitacao,  
         "mensagem": "Programação criada com sucesso!"
     }
