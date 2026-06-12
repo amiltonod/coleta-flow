@@ -140,106 +140,7 @@ async def listar_fixos(db: Session = Depends(get_db)):
     fixos = db.query(Client).filter(Client.fixo == True).all()
     return {"fixos": fixos}
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# PROGRAMAÇÃO — ADICIONAR MANUALMENTE (VERSÃO MELHORADA)
-# ═══════════════════════════════════════════════════════════════════════════════
 
-class AdicionarColetaSchema(BaseModel):
-    """Schema para adicionar coleta manualmente"""
-    codigo_cliente: str = Field(..., min_length=1, max_length=20)
-    data_coleta: date = Field(..., description="Data em formato YYYY-MM-DD")
-
-
-@router.post("/programacao/adicionar", status_code=201)
-async def adicionar_coleta_manual(
-    dados: AdicionarColetaSchema,  # ✅ Recebe JSON (POST data)
-    db: Session = Depends(get_db)
-):
-    """
-    Adiciona coleta manualmente para um cliente.
-    
-    Parâmetros (JSON):
-        codigo_cliente: Código do cliente (ex: L001)
-        data_coleta: Data da coleta (ex: 2026-06-15)
-    
-    Exemplo:
-        POST /programacao/adicionar
-        {
-            "codigo_cliente": "L001",
-            "data_coleta": "2026-06-15"
-        }
-    """
-    
-    # ✅ LOG: Início
-    logger.info(f"Adicionando coleta manual: codigo={dados.codigo_cliente}, data={dados.data_coleta}")
-    
-    try:
-        # Verificar se cliente existe
-        cliente = db.query(Client).filter(Client.codigo == dados.codigo_cliente).first()
-        if not cliente:
-            logger.warning(f"Cliente não encontrado: {dados.codigo_cliente}")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Cliente {dados.codigo_cliente} não encontrado"
-            )
-        
-        # Verificar se já não existe agendamento na data
-        ja_existe = db.query(Schedule).filter(
-            Schedule.codigo_cliente == dados.codigo_cliente,
-            Schedule.data_coleta == dados.data_coleta
-        ).first()
-        
-        if ja_existe:
-            logger.warning(f"Coleta já existe: {dados.codigo_cliente} em {dados.data_coleta}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Já existe coleta agendada para {dados.codigo_cliente} em {dados.data_coleta}"
-            )
-        
-        # ✅ LOG: Debug (criar)
-        logger.debug(f"Criando schedule para {cliente.nome}")
-        
-        # Criar novo agendamento
-        novo_schedule = Schedule(
-            codigo_cliente=cliente.codigo,
-            cliente=cliente.nome,
-            unidade=cliente.unidade,
-            data_coleta=dados.data_coleta,
-            dia_semana=DIAS_SEMANA.get(dados.data_coleta.weekday(), "Desconhecido"),
-            status="Programado",
-            fixo=False
-        )
-        
-        db.add(novo_schedule)
-        db.commit()
-        db.refresh(novo_schedule)
-        
-        # ✅ LOG: Sucesso
-        logger.info(f"Coleta adicionada com sucesso: id={novo_schedule.id}, cliente={cliente.nome}, data={dados.data_coleta}")
-        
-        return {
-            "mensagem": "Coleta adicionada com sucesso",
-            "schedule_id": novo_schedule.id,
-            "codigo_cliente": novo_schedule.codigo_cliente,
-            "cliente": novo_schedule.cliente,
-            "data_coleta": novo_schedule.data_coleta.isoformat(),
-            "status": novo_schedule.status
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Erro ao adicionar coleta manual: {str(e)}", exc_info=True)
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Erro ao adicionar coleta")
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Erro ao adicionar coleta manual: {str(e)}", exc_info=True)
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Erro ao adicionar coleta")
-    
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLIENTES — ADICIONAR
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -249,18 +150,8 @@ async def adicionar_cliente(
     dados: ClienteCreate,
     db: Session = Depends(get_db)
 ):
-    """
-    Adiciona novo cliente.
-    
-    Validações automáticas:
-    - Código: obrigatório, 1-20 caracteres
-    - Nome: obrigatório, 1-200 caracteres
-    - Frequência: se fornecido, 1-365 dias
-    """
-    
     logger.info(f"Adicionando novo cliente: codigo={dados.codigo}, nome={dados.nome}")
     
-    # Verificar se já existe
     existe = db.query(Client).filter_by(codigo=dados.codigo).first()
     if existe:
         logger.warning(f"Tentativa de adicionar cliente duplicado: codigo={dados.codigo}")
@@ -301,6 +192,84 @@ async def adicionar_cliente(
         logger.error(f"Erro ao adicionar cliente {dados.codigo}: {str(e)}", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=500, detail="Erro ao adicionar cliente")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROGRAMAÇÃO — ADICIONAR MANUALMENTE (VERSÃO MELHORADA)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AdicionarColetaSchema(BaseModel):
+    """Schema para adicionar coleta manualmente"""
+    codigo_cliente: str = Field(..., min_length=1, max_length=20)
+    data_coleta: date = Field(..., description="Data em formato YYYY-MM-DD")
+
+
+@router.post("/programacao/adicionar", status_code=201)
+async def adicionar_coleta_manual(
+    dados: AdicionarColetaSchema,  # ✅ Recebe JSON (POST data)
+    db: Session = Depends(get_db)
+):
+    """
+    Adiciona coleta manualmente para um cliente.
+    """
+    logger.info(f"Adicionando coleta manual: codigo={dados.codigo_cliente}, data={dados.data_coleta}")
+    
+    try:
+        # Verificar se cliente existe
+        cliente = db.query(Client).filter(Client.codigo == dados.codigo_cliente).first()
+        if not cliente:
+            logger.warning(f"Cliente não encontrado: {dados.codigo_cliente}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Cliente {dados.codigo_cliente} não encontrado"
+            )
+        
+        # Verificar se já não existe agendamento na data
+        ja_existe = db.query(Schedule).filter(
+            Schedule.codigo_cliente == dados.codigo_cliente,
+            Schedule.data_coleta == dados.data_coleta
+        ).first()
+        
+        if ja_existe:
+            logger.warning(f"Coleta já existe: {dados.codigo_cliente} em {dados.data_coleta}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Já existe coleta agendada para {dados.codigo_cliente} em {dados.data_coleta}"
+            )
+        
+        logger.debug(f"Criando schedule para {cliente.nome}")
+        
+        # Criar novo agendamento
+        novo_schedule = Schedule(
+            codigo_cliente=cliente.codigo,
+            cliente=cliente.nome,
+            unidade=cliente.unidade,
+            data_coleta=dados.data_coleta,
+            dia_semana=DIAS_SEMANA.get(dados.data_coleta.weekday(), "Desconhecido"),
+            status="Programado",
+            fixo=False
+        )
+        
+        db.add(novo_schedule)
+        db.commit()
+        db.refresh(novo_schedule)
+        
+        logger.info(f"Coleta adicionada com sucesso: id={novo_schedule.id}, cliente={cliente.nome}, data={dados.data_coleta}")
+        
+        return {
+            "mensagem": "Coleta adicionada com sucesso",
+            "schedule_id": novo_schedule.id,
+            "codigo_cliente": novo_schedule.codigo_cliente,
+            "cliente": novo_schedule.cliente,
+            "data_coleta": novo_schedule.data_coleta.isoformat(),
+            "status": novo_schedule.status
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao adicionar coleta manual: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erro ao adicionar coleta")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLIENTES - ATUALIZAR
@@ -639,7 +608,9 @@ async def upload_arquivo(file: UploadFile = File(...), db: Session = Depends(get
    - Depois: db.query(Schedule).filter(Schedule.data_coleta.in_(...)) [filtra no banco]
 """
 
+from fastapi import Response
+
 @router.get("/favicon.ico")
 async def favicon():
     """Ignora requisição de favicon"""
-    return {"detail": "Not implemented"}, 204
+    return Response(status_code=204)
