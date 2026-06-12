@@ -194,7 +194,7 @@ async def adicionar_cliente(
         raise HTTPException(status_code=500, detail="Erro ao adicionar cliente")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PROGRAMAÇÃO — ADICIONAR MANUALMENTE (VERSÃO MELHORADA)
+# PROGRAMAÇÃO — ADICIONAR CLIENTE
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class AdicionarColetaSchema(BaseModel):
