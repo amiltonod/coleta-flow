@@ -239,6 +239,68 @@ async def adicionar_coleta_manual(
         logger.error(f"Erro ao adicionar coleta manual: {str(e)}", exc_info=True)
         db.rollback()
         raise HTTPException(status_code=500, detail="Erro ao adicionar coleta")
+    
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES — ADICIONAR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/clientes/adicionar", status_code=201)
+async def adicionar_cliente(
+    dados: ClienteCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Adiciona novo cliente.
+    
+    Validações automáticas:
+    - Código: obrigatório, 1-20 caracteres
+    - Nome: obrigatório, 1-200 caracteres
+    - Frequência: se fornecido, 1-365 dias
+    """
+    
+    logger.info(f"Adicionando novo cliente: codigo={dados.codigo}, nome={dados.nome}")
+    
+    # Verificar se já existe
+    existe = db.query(Client).filter_by(codigo=dados.codigo).first()
+    if existe:
+        logger.warning(f"Tentativa de adicionar cliente duplicado: codigo={dados.codigo}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cliente com código {dados.codigo} já existe"
+        )
+    
+    try:
+        logger.debug(f"Criando objeto Client: nome={dados.nome}, cidade={dados.cidade}")
+        
+        novo_cliente = Client(
+            codigo=dados.codigo,
+            nome=dados.nome,
+            cidade=dados.cidade,
+            unidade=dados.unidade,
+            observacao=dados.observacao,
+            frequencia_dias=dados.frequencia_dias,
+            fixo=dados.fixo,
+            dia_fixo=dados.dia_fixo
+        )
+        
+        db.add(novo_cliente)
+        db.commit()
+        db.refresh(novo_cliente)
+        
+        logger.info(f"Cliente criado com sucesso: id={novo_cliente.id}, codigo={novo_cliente.codigo}")
+        
+        return {
+            "mensagem": "Cliente adicionado com sucesso",
+            "cliente_id": novo_cliente.id,
+            "codigo": novo_cliente.codigo
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao adicionar cliente {dados.codigo}: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erro ao adicionar cliente")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLIENTES - ATUALIZAR
