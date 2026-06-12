@@ -1,13 +1,15 @@
-# Pasta do ambiente virtual
-venv/
-.venv/
+# Logs (não enviar para Git)
+backend/app/logs/
+backend/app/logs/*
+*.log
 
-# Bancos de dados
-*.db
-
-# Arquivos temporários do Python
+# Cache, venv, outros
 __pycache__/
 *.pyc
-
-# Arquivos de sistema/projeto
+*.pyo
+venv/
+.venv/
+*.db
 .DS_Store
+.pytest_cache/
+htmlcov/
