@@ -517,6 +517,86 @@ async def deletar_agendamento(schedule_id: int, db: Session = Depends(get_db)):
         "schedule_id": schedule_id
     }
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROGRAMAÇÃO - ATUALIZAR (DRAG & DROP)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.put("/programacao/{schedule_id}")
+async def atualizar_agendamento(
+    schedule_id: int,
+    dados: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza um agendamento (ex: mover para outro dia via drag & drop).
+    
+    Aceita:
+        data_coleta: Nova data (formato YYYY-MM-DD)
+        status: Novo status (opcional)
+    """
+    logger.info(f"Atualizando agendamento: id={schedule_id}")
+    
+    schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
+    if not schedule:
+        logger.warning(f"Agendamento não encontrado: id={schedule_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agendamento {schedule_id} não encontrado"
+        )
+    
+    try:
+        # Atualizar data se fornecida
+        if "data_coleta" in dados:
+            nova_data = dados["data_coleta"]
+            if isinstance(nova_data, str):
+                from datetime import datetime
+                nova_data = datetime.strptime(nova_data, "%Y-%m-%d").date()
+            
+            logger.debug(f"Mudando data: {schedule.data_coleta} → {nova_data}")
+            
+            # Verificar duplicação
+            ja_existe = db.query(Schedule).filter(
+                Schedule.codigo_cliente == schedule.codigo_cliente,
+                Schedule.data_coleta == nova_data,
+                Schedule.id != schedule_id
+            ).first()
+            
+            if ja_existe:
+                logger.warning(f"Conflito: cliente {schedule.codigo_cliente} já tem coleta em {nova_data}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Já existe coleta agendada para este cliente em {nova_data}"
+                )
+            
+            schedule.data_coleta = nova_data
+            schedule.dia_semana = DIAS_SEMANA.get(nova_data.weekday(), "Desconhecido")
+        
+        # Atualizar status se fornecido
+        if "status" in dados:
+            schedule.status = dados["status"]
+        
+        db.commit()
+        db.refresh(schedule)
+        
+        logger.info(f"Agendamento atualizado: id={schedule_id}, nova_data={schedule.data_coleta}")
+        
+        return {
+            "mensagem": "Agendamento atualizado com sucesso",
+            "schedule_id": schedule.id,
+            "cliente": schedule.cliente,
+            "data_coleta": schedule.data_coleta.isoformat(),
+            "status": schedule.status
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao atualizar agendamento {schedule_id}: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erro ao atualizar agendamento")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # UPLOAD - IMPORTAR EXCEL
 # ═══════════════════════════════════════════════════════════════════════════════
