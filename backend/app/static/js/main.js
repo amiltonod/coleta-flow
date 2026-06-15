@@ -442,11 +442,11 @@ async function drop(e, dia) {
     if(!id) return;
     
     try {
-        const res = await fetch(`/programacao/${id}`, { 
-            method: "PUT", 
-            headers: {"Content-Type":"application/json"}, 
-            body: JSON.stringify({ data_coleta: dia }) 
-        });
+        const res = await fetch(`/programacao/${id}`, {
+            method: "PUT",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ data_coleta: dia })
+            });
         if(res.ok) {
             carregarSemana();
         } else {
