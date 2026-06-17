@@ -480,15 +480,33 @@ document.addEventListener("DOMContentLoaded", () => {
             const checkboxes = document.querySelectorAll(`.checkbox-dia-fixo[data-cliente-id="${clienteId}"]:checked`);
             const diasSelecionados = Array.from(checkboxes).map(cb => cb.value);
 
-            await fetch(`/clientes/${clienteId}/fixar`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    fixo: diasSelecionados.length > 0,
-                    dia_fixo: diasSelecionados.join(",") || null
-                })
-            });
-            carregarSemana();
+            // CORREÇÃO 1: Tratando para enviar string vazia se nenhum dia for marcado
+            const diasString = diasSelecionados.join(",");
+
+            try {
+                const response = await fetch(`/clientes/${clienteId}/fixar`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        fixo: diasSelecionados.length > 0,
+                        dia_fixo: diasString 
+                    })
+                });
+
+                // CORREÇÃO 2: Só atualiza a tela se o backend realmente salvou (status 200)
+                if (response.ok) {
+                    carregarSemana();
+                } else {
+                    // Se o backend der erro (ex: 400, 404, 500), exibe o erro real no console
+                    const erroData = await response.json();
+                    console.error("Erro retornado pelo servidor:", erroData);
+                    alert("Erro ao salvar: " + (erroData.detail || "Erro desconhecido"));
+                }
+            } catch (error) {
+                // Se o servidor estiver fora do ar ou a rede falhar
+                console.error("Falha na rede/requisição:", error);
+                alert("Não foi possível conectar ao servidor.");
+            }
         });
     });
 });

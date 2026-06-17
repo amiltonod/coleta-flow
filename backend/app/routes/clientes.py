@@ -24,6 +24,7 @@ import os
 import io
 import pandas as pd
 import logging
+from typing import Optional 
 
 logger = logging.getLogger("coleta_flow")
 
@@ -129,6 +130,65 @@ async def buscar_clientes(q: str, db: Session = Depends(get_db)):
         }
         for c in clientes
     ]}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLIENTES - FIXAR (Coletas em Dias Fixos)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class FixarClienteSchema(BaseModel):
+    """Schema para fixar cliente em dias específicos"""
+    fixo: bool = Field(..., description="Se o cliente é fixo ou não")
+    # ALTERAÇÃO AQUI: Mudamos o default para "" (string vazia) em vez de None
+    dia_fixo: Optional[str] = Field(default="", description="Dias fixos (Segunda,Quinta)")
+
+
+@router.put("/clientes/{cliente_id}/fixar")
+async def fixar_cliente(
+    cliente_id: int,
+    dados: FixarClienteSchema,
+    db: Session = Depends(get_db)
+):
+    """
+    Fixa cliente em dias específicos da semana.
+    
+    Exemplo:
+        PUT /clientes/1/fixar
+        {
+            "fixo": true,
+            "dia_fixo": "Segunda,Quinta"
+        }
+    """
+    logger.info(f"Fixando cliente: id={cliente_id}, fixo={dados.fixo}, dias={dados.dia_fixo}")
+    
+    cliente = db.query(Client).filter(Client.id == cliente_id).first()
+    if not cliente:
+        logger.warning(f"Cliente não encontrado: id={cliente_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Cliente {cliente_id} não encontrado"
+        )
+    
+    try:
+        cliente.fixo = dados.fixo
+        cliente.dia_fixo = dados.dia_fixo
+        
+        db.commit()
+        db.refresh(cliente)
+        
+        logger.info(f"Cliente fixado: id={cliente_id}, fixo={cliente.fixo}, dias={cliente.dia_fixo}")
+        
+        return {
+            "mensagem": "Cliente fixado com sucesso",
+            "cliente_id": cliente.id,
+            "fixo": cliente.fixo,
+            "dias_fixos": cliente.dia_fixo
+        }
+    
+    except Exception as e:
+        logger.error(f"Erro ao fixar cliente {cliente_id}: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Erro ao fixar cliente")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLIENTES - LISTAR FIXOS
