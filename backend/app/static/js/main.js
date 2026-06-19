@@ -15,21 +15,29 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         })
         .catch(e => console.error("Erro ao fechar semana:", e));
-    // Substitua o bloco antigo do try/catch por este aqui:
-        const elMan = document.getElementById('modalManual');
-        const elRep = document.getElementById('modalReplicar');
 
-        if (elMan) {
-            modMan = bootstrap.Modal.getInstance(elMan) || new bootstrap.Modal(elMan);
-        } else {
-            console.warn("Aviso: Elemento 'modalManual' não foi encontrado no HTML.");
-        }
+    const elMan = document.getElementById('modalManual');
+    const elRep = document.getElementById('modalReplicar');
 
-        if (elRep) {
-            modRep = bootstrap.Modal.getInstance(elRep) || new bootstrap.Modal(elRep);
-        } else {
-            console.warn("Aviso: Elemento 'modalReplicar' não foi encontrado no HTML.");
+    if (elMan) {
+        modMan = bootstrap.Modal.getInstance(elMan) || new bootstrap.Modal(elMan);
+    } else {
+        console.warn("Aviso: Elemento 'modalManual' não foi encontrado no HTML.");
+    }
+
+    if (elRep) {
+        modRep = bootstrap.Modal.getInstance(elRep) || new bootstrap.Modal(elRep);
+    } else {
+        console.warn("Aviso: Elemento 'modalReplicar' não foi encontrado no HTML.");
+    }
+
+    // ── CORREÇÃO GLOBAL PARA RESOLVER O ERRO DE ARIA-HIDDEN ──
+    // Escuta o evento nativo do Bootstrap disparado quando qualquer modal inicia o fechamento
+    document.addEventListener('hide.bs.modal', () => {
+        if (document.activeElement) {
+            document.activeElement.blur(); // Tira o foco do botão de fechar/X imediatamente
         }
+    });
    
     carregarSemana();
     formatarDatasIniciais();
@@ -68,29 +76,43 @@ function mostrarToast(mensagem, tipo = 'danger') {
 }
 
 // ── SISTEMA DE CONFIRMAÇÃO ASSÍNCRONA CORRIGIDO ──────────
-function perguntar(mensagem) {
+function perguntar(texto) {
     return new Promise((resolve) => {
-        document.getElementById('modalConfirmacaoTexto').innerText = message;
+        // 1. Injeta o texto no modal
+        const textoModal = document.getElementById("modalConfirmacaoTexto");
+        if (textoModal) textoModal.innerText = texto;
+
         const modalEl = document.getElementById('modalConfirmacao');
-        
-        // CORREÇÃO: Pega a instância existente ou cria uma nova se não houver
-        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-        
-        const btnConfirmar = document.getElementById('btnConfirmarModal');
-        
-        const novoBtn = btnConfirmar.cloneNode(true);
-        btnConfirmar.parentNode.replaceChild(novoBtn, btnConfirmar);
-        
-        novoBtn.addEventListener('click', () => {
-            modal.hide();
-            resolve(true);
-        });
-        
+        if (!modalEl) {
+            console.error("Modal de confirmação não encontrado no HTML!");
+            resolve(false);
+            return;
+        }
+
+        // Instancia o modal do Bootstrap
+        const instanciaModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+
+        // 2. Configura o botão de Confirmar (Garante que resolve como true)
+        const btnConfirmar = document.getElementById("btnConfirmarModal");
+        if (btnConfirmar) {
+            btnConfirmar.onclick = () => {
+                // 1. Limpa o foco do botão de fechar ou de confirmar
+                if (document.activeElement) document.activeElement.blur(); 
+                
+                // 2. Esconde o modal
+                instanciaModal.hide();
+                resolve(true);
+            };
+        }
+
+        // 3. Configura o fechamento do modal (se fechar no Cancelar ou no X, resolve como false)
         modalEl.addEventListener('hidden.bs.modal', () => {
             resolve(false);
-        }, { once: true });
-        
-        modal.show();
+        }, { once: true }); // 'once: true' evita duplicação de eventos nas próximas vezes
+
+        // 4. Remove focos antigos e abre o modal
+        if (document.activeElement) document.activeElement.blur();
+        instanciaModal.show();
     });
 }
 
@@ -298,7 +320,7 @@ async function filtrarFornecedores() {
     
     const res = await fetch(`/clientes/buscar?q=${encodeURIComponent(q)}`);
     const data = await res.json();
-    const itens = data.resultados;  // ✅ ADICIONE ESTA LINHA
+    const itens = data.resultados;
     
     lista.innerHTML = itens.map(i => `
         <div class="list-group-item list-group-item-action py-1 small" 
@@ -434,38 +456,58 @@ async function salvarCampo(id, nomeCampo, inputElement, valorCustomizado = undef
 
 function abrirReplicar(cod) {
     document.getElementById("replicarCodigo").value = cod;
-    document.getElementById("replicarNovoDia").innerHTML = datasSemana.map((d,i)=>`<option value="${d}">${DIAS[i]}</option>`).join("");
-    if(modRep) modRep.show();
+    
+    const selectDia = document.getElementById("replicarNovoDia");
+    if (!selectDia) return;
+
+    if (!datasSemana || datasSemana.length === 0) {
+        const diasPadrao = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"];
+        selectDia.innerHTML = diasPadrao.map(dia => `<option value="${dia}">${dia}-feira</option>`).join("");
+    } else {
+        selectDia.innerHTML = datasSemana.map((d, i) => {
+            const dataFormatada = d.split('-').reverse().slice(0, 2).join('/');
+            return `<option value="${d}">${DIAS[i]} (${dataFormatada})</option>`;
+        }).join("");
+    }
+    
+    const modalEl = document.getElementById('modalReplicar');
+    if (modalEl) {
+        const modalReplicarInstancia = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modalReplicarInstancia.show();
+    }
 }
 
 async function confirmarReplicacao() {
-    await fetch("/programacao/adicionar", {
-        method: "POST", 
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ codigo_cliente: document.getElementById("replicarCodigo").value, data_coleta: document.getElementById("replicarNovoDia").value })
-    });
-    if(modRep) modRep.hide(); 
-    carregarSemana();
-}
+    const codCliente = document.getElementById("replicarCodigo").value;
+    const novaData = document.getElementById("replicarNovoDia").value;
 
-async function drop(e, dia) {
-    e.preventDefault();
-    const id = e.dataTransfer.getData("text");
-    if(!id) return;
-    
+    if (document.activeElement) document.activeElement.blur(); 
+
+    if (!codCliente || !novaData) {
+        return mostrarToast("Dados insuficientes para replicar.", "warning");
+    }
+
     try {
-        const res = await fetch(`/programacao/${id}`, {
-            method: "PUT",
+        const res = await fetch("/programacao/adicionar", {
+            method: "POST", 
             headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({ data_coleta: dia })
-            });
-        if(res.ok) {
-            carregarSemana();
-        } else {
-            mostrarToast("Erro ao salvar nova posição do box no servidor.", "danger");
+            body: JSON.stringify({ codigo_cliente: codCliente, data_coleta: novaData })
+        });
+
+        const modalEl = document.getElementById('modalReplicar');
+        if (modalEl) {
+            const modalReplicarInstancia = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modalReplicarInstancia.hide();
         }
-    } catch(err) {
-        console.error("Falha ao mover box:", err);
+
+        if (res.ok) {
+            mostrarToast("Agendamento replicado com sucesso!", "success");
+            await carregarSemana();
+        } else {
+            mostrarToast("Erro ao replicar no servidor.", "danger");
+        }
+    } catch (e) {
+        mostrarToast("Erro de comunicação ao replicar.", "danger");
     }
 }
 
@@ -485,14 +527,13 @@ async function atualizarDiaFixo(id, valor) {
     carregarSemana();
 }
 
+// Configuração dos dropdowns de dias fixos
 document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".dias-fixos-dropdown").forEach(dropdown => {
         dropdown.addEventListener("hidden.bs.dropdown", async function () {
             const clienteId = this.dataset.clienteId;
             const checkboxes = document.querySelectorAll(`.checkbox-dia-fixo[data-cliente-id="${clienteId}"]:checked`);
             const diasSelecionados = Array.from(checkboxes).map(cb => cb.value);
-
-            // CORREÇÃO 1: Tratando para enviar string vazia se nenhum dia for marcado
             const diasString = diasSelecionados.join(",");
 
             try {
@@ -505,17 +546,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     })
                 });
 
-                // CORREÇÃO 2: Só atualiza a tela se o backend realmente salvou (status 200)
                 if (response.ok) {
                     carregarSemana();
                 } else {
-                    // Se o backend der erro (ex: 400, 404, 500), exibe o erro real no console
                     const erroData = await response.json();
                     console.error("Erro retornado pelo servidor:", erroData);
                     alert("Erro ao salvar: " + (erroData.detail || "Erro desconhecido"));
                 }
             } catch (error) {
-                // Se o servidor estiver fora do ar ou a rede falhar
                 console.error("Falha na rede/requisição:", error);
                 alert("Não foi possível conectar ao servidor.");
             }
@@ -581,56 +619,143 @@ async function excluirCliente(id, event) {
     } 
 }
 
-// ── CONFIRMAR COLETA CORRIGIDO ────────
 function abrirConfirmar(scheduleId, diaIso) {
     const partes = diaIso.split('-');
     const dataBrPadrao = `${partes[2]}/${partes[1]}/${partes[0]}`;
     
     const input = document.getElementById('inputDataRealColeta');
-    input.value = dataBrPadrao;
+    if (input) {
+        if (input.type === 'text') {
+            input.value = dataBrPadrao; 
+        } else {
+            input.value = diaIso; 
+        }
+    }
     
     const modalEl = document.getElementById('modalConfirmarColeta');
-    
-    // CORREÇÃO: Evita duplicar a inicialização do modal de confirmação
-    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    const modalConfirmar = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
     
     const btnSalvar = document.getElementById('btnSalvarDataReal');
-    
     const novoBtn = btnSalvar.cloneNode(true);
+    novoBtn.id = 'btnSalvarDataReal'; 
     btnSalvar.parentNode.replaceChild(novoBtn, btnSalvar);
     
     novoBtn.addEventListener('click', async () => {
         const novaData = input.value.trim();
         if (!novaData) return mostrarToast("Por favor, preencha a data.", "warning");
         
-        const partesNova = novaData.split('/');
-        if (partesNova.length !== 3) {
-            mostrarToast("Data inválida. Use o formato DD/MM/AAAA.", "warning");
-            return;
-        }
+        if (document.activeElement) document.activeElement.blur(); 
         
-        const dataConvertida = `${partesNova[2]}-${partesNova[1]}-${partesNova[0]}`;
-        modal.hide();
-        await salvarConfirmacao(scheduleId, dataConvertida);
+        if (novaData.includes('-')) {
+            modalConfirmar.hide(); 
+            await salvarConfirmacao(scheduleId, novaData);
+        } else {
+            const partesNova = novaData.split('/');
+            if (partesNova.length !== 3) {
+                return mostrarToast("Data inválida. Use o formato DD/MM/AAAA.", "warning");
+            }
+            const dataConvertida = `${partesNova[2]}-${partesNova[1]}-${partesNova[0]}`;
+            modalConfirmar.hide(); 
+            await salvarConfirmacao(scheduleId, dataConvertida);
+        }
     });
     
-    modal.show();
+    modalConfirmar.show();
 }
 
 async function salvarConfirmacao(scheduleId, dataIso) {
-    const res = await fetch(`/confirmar-coleta/${scheduleId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data_realizada: dataIso })
-    });
-    const data = await res.json();
-    console.log("Resposta completa:", data);  // ← Ver tudo que backend retornou
-    console.log("Proxima coleta:", data.proxima_coleta);  // ← Ver proxima_coleta
+    try {
+        const res = await fetch(`/confirmar-coleta/${scheduleId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data_realizada: dataIso })
+        });
+        
+        const data = await res.json();
+        
+        if (data.erro) {
+            mostrarToast(data.erro, "danger");
+            return;
+        }
+
+        mostrarToast("Coleta confirmada com sucesso!", "success");
+        
+        // 1. Atualiza a grade de cards da semana (risca o card)
+        await carregarSemana();
+
+        // 2. ATUALIZAÇÃO EM TEMPO REAL DA TABELA DE CLIENTES
+        // Localiza o card ou botão que disparou a confirmação para achar o código do cliente
+        const acaoBotao = document.querySelector(`button[onclick*="abrirConfirmar(${scheduleId}"]`);
+        if (acaoBotao) {
+            const card = acaoBotao.closest('.celula-cliente');
+            if (card) {
+                const strongCod = card.querySelector('strong');
+                if (strongCod) {
+                    const codigoCliente = strongCod.textContent.trim();
+                    
+                    // Encontra a linha correta do cliente na tabela inferior
+                    const trTabela = document.querySelector(`#corpoTabelaClientes tr[data-client-code="${codigoCliente}"]`);
+                    if (trTabela) {
+                        
+                        // A) Atualiza o campo "Última Coleta" (Input)
+                        const inputUltima = trTabela.querySelector('.data-coleta-input');
+                        if (inputUltima) {
+                            const partes = dataIso.split('-');
+                            inputUltima.value = `${partes[2]}/${partes[1]}/${partes[0]}`;
+                            
+                            // Efeito visual verde de sucesso no campo
+                            inputUltima.classList.add("salvo-sucesso");
+                            setTimeout(() => inputUltima.classList.remove("salvo-sucesso"), 1000);
+                        }
+                        
+                        // B) Atualiza a coluna "Próxima Coleta" baseada na resposta do servidor
+                        // Se o servidor retornar null, limpamos a célula. Se retornar uma data, atualiza.
+                        const clienteId = trTabela.querySelector('.td-proxima')?.getAttribute('data-id');
+                        if (clienteId) {
+                            atualizarCelulaProxima(clienteId, data.proxima_coleta_calculada);
+                        }
+                    }
+                }
+            }
+        }
+
+    } catch (e) {
+        console.error("Erro ao confirmar coleta:", e);
+        mostrarToast("Erro de comunicação ao confirmar a coleta.", "danger");
+    }
+}
+
+// ── SISTEMA DE ARRASTAR E SOLTAR (DRAG AND DROP) ──────────────────
+
+async function drop(ev, novoDiaFormatado) {
+    ev.preventDefault();
+    const idColeta = ev.dataTransfer.getData("text");
     
-    if (data.erro) {
-        mostrarToast(data.erro, "danger");
+    if (!idColeta || !novoDiaFormatado) {
+        console.error("Dados inválidos no drop.");
         return;
     }
-    mostrarToast("Coleta confirmada com sucesso!", "success");
-    await carregarSemana();
+
+    console.log(`Movendo coleta ID ${idColeta} para o dia ${novoDiaFormatado}`);
+
+    try {
+        const res = await fetch(`/programacao/${idColeta}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                data_coleta: novoDiaFormatado
+            })
+        });
+
+        if (res.ok) {
+            mostrarToast("Coleta movida com sucesso!", "success");
+            await carregarSemana(); 
+        } else {
+            console.error("Erro na resposta do servidor:", res.status);
+            mostrarToast("Não foi possível mover a coleta.", "danger");
+        }
+    } catch (error) {
+        console.error("Erro na requisição do drop:", error);
+        mostrarToast("Erro de conexão ao mover a coleta.", "danger");
+    }
 }
