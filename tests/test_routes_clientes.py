@@ -250,11 +250,11 @@ class TestConfirmarColeta:
         cliente_atualizado = db_session.query(Client).filter(Client.id == cliente_fixo.id).first()
         assert cliente_atualizado.ultima_coleta == date(2026, 6, 11)
     
-  def test_schedule_inexistente(self, test_client):
-    
+    def test_schedule_inexistente(self, test_client):
+        """Retorna 404 para schedule que não existe"""
         dados = {"data_realizada": "2026-06-11"}
         response = test_client.post("/confirmar-coleta/999", json=dados)
-        git add tests/test_routes_clientes.py
+        
         # ✅ Verificar status code
         assert response.status_code == 404
         
@@ -263,7 +263,7 @@ class TestConfirmarColeta:
         assert "detail" in response_data
         assert isinstance(response_data["detail"], str)
         assert len(response_data["detail"]) > 0
-    
+        
     def test_data_invalida(self, test_client, db_session, schedule_programado):
         """Rejeita data inválida"""
         dados = {"data_realizada": "data-invalida"}
