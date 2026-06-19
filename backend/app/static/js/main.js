@@ -15,13 +15,22 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         })
         .catch(e => console.error("Erro ao fechar semana:", e));
+    // Substitua o bloco antigo do try/catch por este aqui:
+        const elMan = document.getElementById('modalManual');
+        const elRep = document.getElementById('modalReplicar');
 
-    try {
-        modMan = new bootstrap.Modal(document.getElementById('modalManual'));
-        modRep = new bootstrap.Modal(document.getElementById('modalReplicar'));
-    } catch (err) {
-        console.error("Erro ao inicializar componentes Bootstrap:", err);
-    }
+        if (elMan) {
+            modMan = bootstrap.Modal.getInstance(elMan) || new bootstrap.Modal(elMan);
+        } else {
+            console.warn("Aviso: Elemento 'modalManual' não foi encontrado no HTML.");
+        }
+
+        if (elRep) {
+            modRep = bootstrap.Modal.getInstance(elRep) || new bootstrap.Modal(elRep);
+        } else {
+            console.warn("Aviso: Elemento 'modalReplicar' não foi encontrado no HTML.");
+        }
+   
     carregarSemana();
     formatarDatasIniciais();
 });
@@ -58,12 +67,15 @@ function mostrarToast(mensagem, tipo = 'danger') {
     });
 }
 
-// ── SISTEMA DE CONFIRMAÇÃO ASSÍNCRONA (MODAL INTERNO) ──────────
+// ── SISTEMA DE CONFIRMAÇÃO ASSÍNCRONA CORRIGIDO ──────────
 function perguntar(mensagem) {
     return new Promise((resolve) => {
-        document.getElementById('modalConfirmacaoTexto').innerText = mensagem;
+        document.getElementById('modalConfirmacaoTexto').innerText = message;
         const modalEl = document.getElementById('modalConfirmacao');
-        const modal = new bootstrap.Modal(modalEl);
+        
+        // CORREÇÃO: Pega a instância existente ou cria uma nova se não houver
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        
         const btnConfirmar = document.getElementById('btnConfirmarModal');
         
         const novoBtn = btnConfirmar.cloneNode(true);
@@ -569,7 +581,7 @@ async function excluirCliente(id, event) {
     } 
 }
 
-// ── CONFIRMAR COLETA (REESTRUTURADO SEM POPUPS NATIVOS) ────────
+// ── CONFIRMAR COLETA CORRIGIDO ────────
 function abrirConfirmar(scheduleId, diaIso) {
     const partes = diaIso.split('-');
     const dataBrPadrao = `${partes[2]}/${partes[1]}/${partes[0]}`;
@@ -578,7 +590,10 @@ function abrirConfirmar(scheduleId, diaIso) {
     input.value = dataBrPadrao;
     
     const modalEl = document.getElementById('modalConfirmarColeta');
-    const modal = new bootstrap.Modal(modalEl);
+    
+    // CORREÇÃO: Evita duplicar a inicialização do modal de confirmação
+    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    
     const btnSalvar = document.getElementById('btnSalvarDataReal');
     
     const novoBtn = btnSalvar.cloneNode(true);
@@ -609,6 +624,9 @@ async function salvarConfirmacao(scheduleId, dataIso) {
         body: JSON.stringify({ data_realizada: dataIso })
     });
     const data = await res.json();
+    console.log("Resposta completa:", data);  // ← Ver tudo que backend retornou
+    console.log("Proxima coleta:", data.proxima_coleta);  // ← Ver proxima_coleta
+    
     if (data.erro) {
         mostrarToast(data.erro, "danger");
         return;

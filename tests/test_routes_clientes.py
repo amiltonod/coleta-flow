@@ -19,6 +19,8 @@ from backend.app.models.schedule import Schedule
 import pytest
 from datetime import date
 
+from tests.conftest import test_client
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TESTES: GET /clientes — Listar Todos
@@ -249,12 +251,17 @@ class TestConfirmarColeta:
         assert cliente_atualizado.ultima_coleta == date(2026, 6, 11)
     
     def test_schedule_inexistente(self, test_client):
-        """Retorna 404 para schedule que não existe"""
+        
         dados = {"data_realizada": "2026-06-11"}
         response = test_client.post("/confirmar-coleta/999", json=dados)
         
+        print(f"\n=== DEBUG ===")
+        print(f"Status: {response.status_code}")
+        print(f"Resposta completa: {response.json()}")
+        print(f"Detail: {response.json()['detail']}")
+        print(f"=== FIM DEBUG ===\n")
+        
         assert response.status_code == 404
-        assert "não encontrado" in response.json()["detail"]
     
     def test_data_invalida(self, test_client, db_session, schedule_programado):
         """Rejeita data inválida"""

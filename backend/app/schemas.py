@@ -85,45 +85,14 @@ class ClienteCreate(BaseModel):
             }
         }
 
-
 class ClienteUpdate(BaseModel):
-    """Schema para atualizar cliente via PUT"""
-    
-    nome: Optional[str] = Field(
-        None, 
-        min_length=1,
-        max_length=200
-    )
-    cidade: Optional[str] = Field(
-        None, 
-        max_length=100
-    )
-    unidade: Optional[str] = Field(
-        None, 
-        max_length=100
-    )
-    observacao: Optional[str] = Field(
-        None, 
-        max_length=500
-    )
-    frequencia_dias: Optional[int] = Field(
-        None, 
-        ge=1, 
-        le=365
-    )
-    ultima_coleta: Optional[date] = Field(
-        None,
-        description="Última data de coleta realizada"
-    )
-    proxima_coleta: Optional[date] = Field(
-        None,
-        description="Próxima data de coleta calculada"
-    )
+    nome: Optional[str] = None
+    cidade: Optional[str] = None
+    frequencia_dias: Optional[int] = None
+    ultima_coleta: Optional[date] = Field(None, description="Última coleta realizada")
+    proxima_coleta: Optional[date] = Field(None, description="Próxima coleta calculada")
     fixo: Optional[bool] = None
-    dia_fixo: Optional[str] = Field(
-        None,
-        max_length=100
-    )
+    dia_fixo: Optional[str] = None
     
     @validator("nome")
     def nome_nao_vazio(cls, v):

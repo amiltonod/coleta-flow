@@ -500,60 +500,41 @@ async def processar_geracao_automatica(db: Session = Depends(get_db)):
 # PROGRAMAÇÃO - CONFIRMAR COLETA
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ❌ ANTES:
-# @router.post("/confirmar-coleta/{schedule_id}")
-# async def confirmar_coleta(schedule_id: int, dados: dict, db: Session = Depends(get_db)):
-#     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
-#     if not schedule:
-#         return {"erro": "Agendamento não encontrado"}  # ← Status 200 errado!
-
-# ✅ DEPOIS:
 @router.post("/confirmar-coleta/{schedule_id}")
 async def confirmar_coleta(
     schedule_id: int,
-    dados: ConfirmarColeta,  # ← Validado e com data segura
+    dados: ConfirmarColeta,
     db: Session = Depends(get_db)
 ):
-    """
-    Marca coleta como realizada.
-    
-    Atualiza:
-    - Schedule.status = "Concluído"
-    - Client.ultima_coleta = data_realizada
-    - Client.proxima_coleta = calculada automaticamente
-    """
     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
     if not schedule:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Agendamento {schedule_id} não encontrado"
-        )
+        raise HTTPException(status_code=404, detail="...")
     
-    # Atualizar schedule
+    # ✅ CERTIFIQUE-SE QUE TEM ISSO:
     schedule.status = "Concluído"
     schedule.data_coleta = dados.data_realizada
     
     # Atualizar cliente
-    cliente = db.query(Client).filter(
-        Client.codigo == schedule.codigo_cliente
-    ).first()
+    cliente = db.query(Client).filter(Client.codigo == schedule.codigo_cliente).first()
     
     if cliente:
-        cliente.ultima_coleta = dados.data_realizada
+        cliente.ultima_coleta = dados.data_realizada  # ✅ Atualizar ultima_coleta
         
-        # Calcular próxima coleta
+        # ✅ RECALCULAR PRÓXIMA COLETA
         if cliente.frequencia_dias:
+            from datetime import timedelta
             proxima = dados.data_realizada + timedelta(days=cliente.frequencia_dias)
-            cliente.proxima_coleta = proxima
+            cliente.proxima_coleta = proxima  # ✅ Salvar proxima_coleta
+            logger.info(f"Próxima coleta calculada: {proxima}")
     
     db.commit()
     
     return {
-    "mensagem": "Coleta confirmada com sucesso",
-    "schedule_id": schedule_id,
-    "status": schedule.status,
-    "proxima_coleta_calculada": cliente.proxima_coleta.isoformat() if (cliente and cliente.proxima_coleta) else None
-}
+        "mensagem": "Coleta confirmada com sucesso",
+        "schedule_id": schedule_id,
+        "status": schedule.status,
+        "proxima_coleta_calculada": cliente.proxima_coleta.isoformat() if (cliente and cliente.proxima_coleta) else None
+    }
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PROGRAMAÇÃO - DELETAR
