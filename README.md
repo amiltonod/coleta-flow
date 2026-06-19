@@ -5,7 +5,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136.3-009688?style=flat)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776ab?style=flat)](https://www.python.org)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=flat)](https://www.sqlite.org)
-[![Tests](https://img.shields.io/badge/Tests-35+-green?style=flat)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-29-green?style=flat)](tests/)
 [![Coverage](https://img.shields.io/badge/Coverage-88%25-brightgreen?style=flat)](tests/)
 [![Sprints](https://img.shields.io/badge/Sprints-4/4%20✓-blue?style=flat)](#-roadmap)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat)](#)
