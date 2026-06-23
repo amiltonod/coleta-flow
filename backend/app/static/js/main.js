@@ -759,3 +759,131 @@ async function drop(ev, novoDiaFormatado) {
         mostrarToast("Erro de conexão ao mover a coleta.", "danger");
     }
 }
+
+function hojeISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function showToast(msg, tipo = "success") {
+  // usa o toast já existente no projeto, se disponível
+  if (typeof exibirToast === "function") { exibirToast(msg, tipo); return; }
+  const cor = tipo === "success" ? "#25D366" : tipo === "danger" ? "#ef4444" : "#2563eb";
+  const div = document.createElement("div");
+  div.textContent = msg;
+  Object.assign(div.style, {
+    position:"fixed", bottom:"24px", right:"24px", zIndex:"9999",
+    background: cor, color:"#fff", padding:"10px 20px",
+    borderRadius:"10px", fontWeight:"600", fontSize:".85rem",
+    boxShadow:"0 4px 16px rgba(0,0,0,.18)", transition:"opacity .3s"
+  });
+  document.body.appendChild(div);
+  setTimeout(() => { div.style.opacity="0"; setTimeout(() => div.remove(), 400); }, 3000);
+}
+
+// ─── IMPORTAR PROGRAMAÇÃO ────────────────────────────────────
+async function importarProgramacao() {
+  const input = document.getElementById("inputProgramacao");
+  if (!input || !input.files.length) {
+    showToast("Selecione um arquivo CSV ou Excel de programação.", "warning");
+    return;
+  }
+  const form = new FormData();
+  form.append("file", input.files[0]);
+
+  try {
+    const resp = await fetch("/importar-programacao", { method: "POST", body: form });
+    const data = await resp.json();
+
+    if (resp.ok) {
+      showToast(`✅ Importado com sucesso!`, "success");
+
+      if (data.texto_whatsapp) {
+        const modalEl = document.getElementById("modalWhatsApp");
+        const waTexto = document.getElementById("waTexto");
+        const waContador = document.getElementById("waContador");
+        const waDataLabel = document.getElementById("waDataLabel");
+
+        if (waTexto) waTexto.value = data.texto_whatsapp;
+        if (waContador) waContador.textContent = `${data.texto_whatsapp.length} caracteres`;
+        if (waDataLabel) waDataLabel.textContent = "Gerado da planilha importada";
+
+        if (modalEl) {
+          const modal = new bootstrap.Modal(modalEl);
+          modal.show();
+        }
+      }
+    } else {
+      showToast("Erro: " + (data.detail || "Falha na importação"), "danger");
+    }
+  } catch (e) {
+    showToast("Erro de conexão: " + e.message, "danger");
+  }
+  input.value = "";
+}
+
+// ─── MODAL WHATSAPP ──────────────────────────────────────────
+function abrirModalWhatsApp() {
+  const input = document.getElementById("waData");
+  if (!input.value) input.value = hojeISO();
+  document.getElementById("waTexto").value = "";
+  document.getElementById("waContador").textContent = "0 caracteres";
+  document.getElementById("waDataLabel").textContent = "";
+  const modal = new bootstrap.Modal(document.getElementById("modalWhatsApp"));
+  modal.show();
+  // já gera automaticamente com a data de hoje
+  buscarMensagemWhatsApp();
+}
+
+async function buscarMensagemWhatsApp() {
+  const dataVal = document.getElementById("waData").value;
+  if (!dataVal) { showToast("Selecione uma data.", "warning"); return; }
+
+  const labelEl = document.getElementById("waDataLabel");
+  labelEl.textContent = "⏳ Carregando...";
+
+  try {
+    const resp = await fetch(`/programacao/whatsapp?data=${dataVal}`);
+    const json = await resp.json();
+    if (resp.ok) {
+      const area = document.getElementById("waTexto");
+      area.value = json.texto;
+      document.getElementById("waContador").textContent = json.texto.length + " caracteres";
+      labelEl.textContent = `Programação de ${json.data}`;
+    } else {
+      showToast("Erro ao gerar mensagem: " + (json.detail || ""), "danger");
+      labelEl.textContent = "";
+    }
+  } catch (e) {
+    showToast("Erro de conexão: " + e.message, "danger");
+    document.getElementById("waDataLabel").textContent = "";
+  }
+}
+
+async function copiarMensagemWhatsApp() {
+  const texto = document.getElementById("waTexto").value;
+  if (!texto || texto.startsWith("PROGRAMAÇÃO") === false) {
+    showToast("Gere a mensagem antes de copiar.", "warning");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(texto);
+    showToast("✅ Mensagem copiada! Cole no WhatsApp.", "success");
+  } catch {
+    // fallback para browsers antigos
+    document.getElementById("waTexto").select();
+    document.execCommand("copy");
+    showToast("✅ Mensagem copiada!", "success");
+  }
+}
+
+// atualizar contador ao editar manualmente
+document.addEventListener("DOMContentLoaded", function () {
+  const area = document.getElementById("waTexto");
+  const contador = document.getElementById("waContador");
+
+  if (area && contador) {
+    area.addEventListener("input", function () {
+      contador.textContent = area.value.length + " caracteres";
+    });
+  }
+});

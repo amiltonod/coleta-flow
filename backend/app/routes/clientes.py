@@ -1,18 +1,3 @@
-"""
-ROTAS REFATORADAS — Sprint 1
-
-Este arquivo mostra TODAS as mudanças nas rotas para usar Pydantic + padronizar erros.
-
-IMPORTANTE: Substitua seu backend/app/routes/clientes.py com este arquivo,
-ou aplique as mudanças manualmente seguindo o padrão.
-
-Mudanças principales:
-1. Importar schemas (ClienteCreate, ClienteUpdate, ConfirmarColeta)
-2. Mudar `dados: dict` para `dados: ClienteCreate` (validação automática)
-3. Mudar `return {"erro": ...}` para `raise HTTPException(...)`
-4. Adicionar imports necessários
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
 from pydantic import BaseModel, Field 
 from fastapi.responses import HTMLResponse
@@ -47,6 +32,9 @@ from backend.app.services.generate_schedule import (
 )
 from backend.app.services.fechar_semana import fechar_semana
 from backend.app.services.import_service import importar_clientes
+from backend.app.services.import_programacao import importar_programacao
+from backend.app.services.whatsapp_service import gerar_mensagem_whatsapp
+from backend.app.models.veiculo import Veiculo
 
 # Configuração
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -697,41 +685,87 @@ async def upload_arquivo(file: UploadFile = File(...), db: Session = Depends(get
             detail=f"Erro ao processar arquivo: {str(e)}"
         )
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# ℹ️ RESUMO DAS MUDANÇAS
-# ═══════════════════════════════════════════════════════════════════════════════
-"""
-✅ MUDANÇAS IMPLEMENTADAS:
-
-1. IMPORTES NOVOS
-   - from backend.app.schemas import (ClienteCreate, ClienteUpdate, ConfirmarColeta)
-   
-2. ENDPOINTS COM VALIDAÇÃO PYDANTIC
-   - POST /clientes/adicionar: Usa ClienteCreate
-   - PUT /clientes/{id}: Usa ClienteUpdate
-   - POST /confirmar-coleta/{id}: Usa ConfirmarColeta
-   
-3. PADRONIZAÇÃO DE ERROS
-   - Antes: return {"erro": "..."}  # Status 200
-   - Depois: raise HTTPException(status_code=404, detail="...")
-   
-4. VALIDAÇÕES AUTOMÁTICAS
-   - Tipo de dado (str, int, date)
-   - Tamanho (min/max)
-   - Valores obrigatórios
-   
-5. REMOVIDO CÓDIGO DUPLICADO DE FECHAMENTO
-   - Antes: realizar_fechamento_automatico() [função duplicada]
-   - Depois: processar_fechamento(db) [de services]
-   
-6. OTIMIZAÇÃO DE QUERY
-   - Antes: db.query(Schedule).all() [carrega tudo]
-   - Depois: db.query(Schedule).filter(Schedule.data_coleta.in_(...)) [filtra no banco]
-"""
-
 from fastapi import Response
+from datetime import date as date_type
 
 @router.get("/favicon.ico")
 async def favicon():
     """Ignora requisição de favicon"""
     return Response(status_code=204)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# IMPORTAR PROGRAMAÇÃO (CSV/Excel da planilha de coletas)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/importar-programacao")
+async def importar_programacao_endpoint(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    ext = file.filename.lower().rsplit(".", 1)[-1]
+    if ext not in ("csv", "xlsx", "xls"):
+        raise HTTPException(status_code=400, detail="Envie um CSV ou Excel")
+
+    conteudo = await file.read()
+    resultado = importar_programacao(conteudo, db)
+
+    # Gerar mensagem WhatsApp a partir das linhas lidas (não do banco)
+    texto_whatsapp = _gerar_texto_das_linhas(resultado["linhas_lidas"])
+
+    return {
+        "mensagem": "Importação concluída",
+        "veiculos_novos": resultado["veiculos_novos"],
+        "veiculos_atualizados": resultado["veiculos_atualizados"],
+        "erros": resultado["erros"],
+        "texto_whatsapp": texto_whatsapp,   # ← já vem pronto
+    }
+
+
+def _gerar_texto_das_linhas(linhas) -> str:
+    """Gera a mensagem de WhatsApp a partir das linhas lidas da planilha."""
+    if not linhas:
+        return "(Nenhuma coleta encontrada na planilha)"
+
+    # pega a data da primeira linha válida
+    data_str = next(
+        (l.data.strftime("%d/%m/%Y") for l in linhas if l.data), "—"
+    )
+
+    # agrupar por placa
+    grupos: dict = {}
+    for l in linhas:
+        if l.placa not in grupos:
+            grupos[l.placa] = {"motorista": l.motorista, "coletas": []}
+        grupos[l.placa]["coletas"].append(l)
+
+    texto = f"PROGRAMAÇÃO – {data_str}\n\n"
+
+    for placa in sorted(grupos):
+        g = grupos[placa]
+        coletas = sorted(g["coletas"], key=lambda x: x.hora or "99:99")
+        motorista = (g["motorista"] or "NÃO INFORMADO").upper()
+        texto += f"*{placa} – {motorista}*\n\n"
+        for c in coletas:
+            texto += f"{c.hora or '--:--'} – {c.cliente}\n"
+            if c.obs:
+                texto += c.obs + "\n"
+            texto += "\n"
+        texto += "────────────────────\n\n"
+
+    return texto
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LISTAR VEÍCULOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/veiculos")
+async def listar_veiculos(db: Session = Depends(get_db)):
+    """Retorna todos os veículos cadastrados (placa + motorista)."""
+    veiculos = db.query(Veiculo).order_by(Veiculo.placa).all()
+    return {
+        "veiculos": [
+            {"id": v.id, "placa": v.placa, "motorista": v.motorista or ""}
+            for v in veiculos
+        ]
+    }

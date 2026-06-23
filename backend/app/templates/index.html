@@ -26,12 +26,28 @@
     <div class="content">
 
         <div class="action-bar no-print">
-            <div class="action-card d-flex align-items-center gap-2">
-                <input type="file" id="inputFile" class="form-control form-control-sm" style="width: 180px; font-size: 0.75rem;">
-                <button id="btnImportar" class="btn-primary-almeida" onclick="fazerUpload()">Importar Planilha</button>
+            <div class="action-card d-flex align-items-center gap-2 flex-wrap">
+
+                <!-- Importar clientes (planilha cadastro) -->
+                <div class="d-flex align-items-center gap-1">
+                    <input type="file" id="inputFile" class="form-control form-control-sm" style="width: 160px; font-size: 0.72rem;" accept=".xlsx,.xls">
+                    <button class="btn-primary-almeida" onclick="fazerUpload()" title="Importar cadastro de clientes (Excel)">📥 Clientes</button>
+                </div>
+
                 <div class="vr mx-1"></div>
-                <button class="btn-primary-almeida" onclick="gerarProgramacao()">Gerar Coletas</button>
+
+                <!-- Importar programação (CSV/Excel da planilha de coletas) -->
+                <div class="d-flex align-items-center gap-1">
+                    <input type="file" id="inputProgramacao" class="form-control form-control-sm" style="width: 160px; font-size: 0.72rem;" accept=".csv,.xlsx,.xls">
+                    <button class="btn-primary-almeida" onclick="importarProgramacao()" style="background-color:#25D366;" title="Importar programação do dia (CSV exportado do Google Sheets)">📋 Programação</button>
+                </div>
+
+                <div class="vr mx-1"></div>
+
+                <button class="btn-primary-almeida" onclick="gerarProgramacao()">⚙️ Gerar Coletas</button>
                 <button class="btn-primary-almeida" onclick="abrirModalManual()" style="background-color: var(--verde-medio)">➕ Novo</button>
+
+
                 <button class="btn-outline-almeida" onclick="window.print()">🖨️ Imprimir</button>
             </div>
         </div>
@@ -245,6 +261,67 @@
 <!-- ── TOAST CONTAINER ────────────────────────────────────── -->
 <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1100"></div>
 
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL WHATSAPP — Programação formatada para envio
+════════════════════════════════════════════════════════════ -->
+<div class="modal fade no-print" id="modalWhatsApp" tabindex="-1" aria-labelledby="modalWhatsAppLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content" style="border-radius:14px; overflow:hidden; border:none; box-shadow:0 8px 40px rgba(0,0,0,.18);">
+
+      <!-- Cabeçalho -->
+      <div class="modal-header py-3" style="background:#25D366; border:none;">
+        <div class="d-flex align-items-center gap-2">
+          <span style="font-size:1.4rem;">📲</span>
+          <h6 class="modal-title fw-bold text-white mb-0" id="modalWhatsAppLabel">Programação para WhatsApp</h6>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <!-- Área da mensagem -->
+      <div class="modal-body pt-2 px-4 pb-3" style="background:#f0fdf4;">
+        <div style="position:relative;">
+          <textarea id="waTexto"
+            rows="18"
+            class="form-control"
+            readonly
+            style="
+              font-family: 'Courier New', monospace;
+              font-size: .8rem;
+              line-height: 1.55;
+              background: #fff;
+              border: 1.5px solid #d1fae5;
+              border-radius: 10px;
+              resize: vertical;
+              color: #1a1a1a;
+              padding: 14px 16px;
+              box-shadow: inset 0 1px 4px rgba(0,0,0,.05);
+            "
+            placeholder="Clique em 'Gerar' para carregar a programação do dia..."></textarea>
+
+          <!-- badge de contagem de caracteres -->
+          <span id="waContador"
+            style="
+              position:absolute; bottom:10px; right:14px;
+              font-size:.68rem; color:#6b7280; background:rgba(255,255,255,.85);
+              padding:1px 6px; border-radius:6px;
+            ">0 caracteres</span>
+        </div>
+      </div>
+
+      <!-- Rodapé -->
+      <div class="modal-footer px-4 py-3" style="background:#f0fdf4; border-top:1px solid #d1fae5; gap:.6rem;">
+        <button class="btn btn-sm fw-semibold text-white"
+                style="background:#25D366; border:none; border-radius:8px; min-width:130px;"
+                onclick="copiarMensagemWhatsApp()">
+          📋 Copiar Mensagem
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;" data-bs-dismiss="modal">Fechar</button>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
