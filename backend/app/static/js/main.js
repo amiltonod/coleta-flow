@@ -781,6 +781,14 @@ function showToast(msg, tipo = "success") {
 }
 
 // ─── IMPORTAR PROGRAMAÇÃO ────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("btnImportar");
+    if (btn) {
+        btn.addEventListener("click", importarProgramacao);
+    }
+});
+
+
 async function importarProgramacao() {
   const input = document.getElementById("inputProgramacao");
   if (!input || !input.files.length) {

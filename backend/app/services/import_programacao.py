@@ -83,8 +83,8 @@ def importar_programacao(conteudo: bytes, db: Session) -> dict:
             hora_str     = _parse_hora(row.iloc[3] if len(row) > 3 else None)
             cliente_nome = _clean(row.iloc[4] if len(row) > 4 else None)
             obs          = _clean(row.iloc[5] if len(row) > 5 else None)
-            placa        = _clean(row.iloc[8] if len(row) > 8 else None)
-            motorista    = _clean(row.iloc[9] if len(row) > 9 else None)
+            placa        = _clean(row.iloc[7] if len(row) > 7 else None)
+            motorista    = _clean(row.iloc[8] if len(row) > 8 else None)
 
             if not placa:
                 continue  # linha sem placa — pula
