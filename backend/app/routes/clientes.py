@@ -32,7 +32,7 @@ from backend.app.services.generate_schedule import (
 )
 from backend.app.services.fechar_semana import fechar_semana
 from backend.app.services.import_service import importar_clientes
-from backend.app.services.import_programacao import importar_programacao
+from backend.app.services.import_programacao import importar_programacao, importar_texto
 from backend.app.services.whatsapp_service import gerar_mensagem_whatsapp
 from backend.app.models.veiculo import Veiculo
 
@@ -723,7 +723,7 @@ async def importar_programacao_endpoint(
 
 
 def _gerar_texto_das_linhas(linhas) -> str:
-    """Gera a mensagem de WhatsApp a partir das linhas lidas da planilha."""
+    """Gera a mensagem de WhatsApp estilizada a partir das linhas lidas da planilha."""
     if not linhas:
         return "(Nenhuma coleta encontrada na planilha)"
 
@@ -732,6 +732,8 @@ def _gerar_texto_das_linhas(linhas) -> str:
         (l.data.strftime("%d/%m/%Y") for l in linhas if l.data), "—"
     )
 
+    total_coletas = len(linhas)
+
     # agrupar por placa
     grupos: dict = {}
     for l in linhas:
@@ -739,21 +741,33 @@ def _gerar_texto_das_linhas(linhas) -> str:
             grupos[l.placa] = {"motorista": l.motorista, "coletas": []}
         grupos[l.placa]["coletas"].append(l)
 
-    texto = f"PROGRAMAÇÃO – {data_str}\n\n"
+    total_veiculos = len(grupos)
+    divisor = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    texto  = f"*PROGRAMAÇÃO · {data_str}*\n"
+    texto += f"_{total_veiculos} veículos · {total_coletas} coletas_\n"
+    texto += f"{divisor}\n\n"
 
     for placa in sorted(grupos):
         g = grupos[placa]
         coletas = sorted(g["coletas"], key=lambda x: x.hora or "99:99")
         motorista = (g["motorista"] or "NÃO INFORMADO").upper()
-        texto += f"*{placa} – {motorista}*\n\n"
-        for c in coletas:
-            texto += f"{c.hora or '--:--'} – {c.cliente}\n"
-            if c.obs:
-                texto += c.obs + "\n"
-            texto += "\n"
-        texto += "────────────────────\n\n"
+        qtd = len(coletas)
 
-    return texto
+        texto += f"🚛 *{placa} · {motorista}*\n"
+        texto += f"_({qtd} coleta{'s' if qtd > 1 else ''})_\n\n"
+
+        for c in coletas:
+            hora = c.hora or "--:--"
+            texto += f"▸ {hora} · {c.cliente}\n"
+            if c.obs:
+                texto += f"  {c.obs}\n"
+            texto += "\n"
+
+        texto += f"{divisor}\n\n"
+
+    return texto.rstrip() + "\n"
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # LISTAR VEÍCULOS
@@ -768,4 +782,40 @@ async def listar_veiculos(db: Session = Depends(get_db)):
             {"id": v.id, "placa": v.placa, "motorista": v.motorista or ""}
             for v in veiculos
         ]
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COLAR PROGRAMAÇÃO (cola direta do Sagy — substitui importação de arquivo)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel as PydanticBase
+
+class TextoProgramacao(PydanticBase):
+    texto: str
+
+@router.post("/colar-programacao")
+async def colar_programacao_endpoint(
+    payload: TextoProgramacao,
+    db: Session = Depends(get_db),
+):
+    """
+    Recebe o texto copiado diretamente do Sagy (Ctrl+C na tabela → Ctrl+V aqui).
+    Formato TSV: colunas separadas por tab, primeira linha = cabeçalho.
+    Salva placas/motoristas novos e devolve a mensagem de WhatsApp pronta.
+    """
+    resultado = importar_texto(payload.texto, db)
+
+    if resultado["erros"] and not resultado["linhas_lidas"]:
+        raise HTTPException(
+            status_code=400,
+            detail=resultado["erros"][0]["erro"],
+        )
+
+    texto_whatsapp = _gerar_texto_das_linhas(resultado["linhas_lidas"])
+
+    return {
+        "veiculos_novos": resultado["veiculos_novos"],
+        "veiculos_atualizados": resultado["veiculos_atualizados"],
+        "erros": resultado["erros"],
+        "texto_whatsapp": texto_whatsapp,
     }

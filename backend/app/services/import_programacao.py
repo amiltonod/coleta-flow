@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from backend.app.models.veiculo import Veiculo
 
 
+# ── helpers ──────────────────────────────────────────────────────────────────
+
 def _clean(val, default: str = "") -> str:
     """Remove espaços normais e \xa0 (espaço invisível do sistema exportador)."""
     if val is None:
@@ -44,7 +46,7 @@ def _parse_hora(val) -> str | None:
 
 
 class LinhaColeta:
-    """Representa uma linha lida da planilha — usada para gerar o WhatsApp."""
+    """Representa uma linha lida — usada para gerar o WhatsApp."""
     def __init__(self, data, hora, cliente, obs, placa, motorista):
         self.data      = data
         self.hora      = hora
@@ -54,51 +56,91 @@ class LinhaColeta:
         self.motorista = motorista
 
 
-def importar_programacao(conteudo: bytes, db: Session) -> dict:
-   
-    try:
-        df = pd.read_excel(io.BytesIO(conteudo), dtype=str)
-    except Exception:
-        try:
-            df = pd.read_csv(io.BytesIO(conteudo), dtype=str)
-        except Exception as e:
-            return {
-                "veiculos_novos": 0, "veiculos_atualizados": 0,
-                "linhas_lidas": [],
-                "erros": [{"linha": -1, "erro": f"Formato inválido: {e}"}],
-            }
+# ── mapeamento de colunas por nome ───────────────────────────────────────────
+# Variações aceitas para cada campo — protege contra diferenças entre máquinas
+COLUNAS = {
+    "data":      ["DATA"],
+    "hora":      ["HORA"],
+    "cliente":   ["NOME RAZÃO SOCIAL", "NOME RAZAO SOCIAL", "CLIENTE", "RAZÃO SOCIAL"],
+    "obs":       ["OBS 01", "OBS", "OBSERVAÇÃO", "OBSERVACAO"],
+    "placa":     ["PLACA"],
+    "motorista": ["MOTORISTA"],
+}
+
+
+def _mapear_colunas(df: pd.DataFrame) -> dict:
+    """
+    Normaliza os cabeçalhos para maiúsculo e localiza cada campo.
+    Retorna {campo: nome_real_no_df} — valor None se não encontrado.
+    """
+    colunas_df = {c.strip().upper(): c for c in df.columns}
+    mapeamento = {}
+    for campo, variacoes in COLUNAS.items():
+        encontrado = None
+        for v in variacoes:
+            if v in colunas_df:
+                encontrado = colunas_df[v]
+                break
+        mapeamento[campo] = encontrado
+    return mapeamento
+
+
+def _col(row, mapa: dict, campo: str):
+    """Lê o valor de uma linha pelo nome mapeado. Retorna None se não mapeado."""
+    nome = mapa.get(campo)
+    if nome is None or nome not in row.index:
+        return None
+    return row[nome]
+
+
+# ── núcleo compartilhado ─────────────────────────────────────────────────────
+
+def _processar_df(df: pd.DataFrame, db: Session) -> dict:
+    """
+    Recebe um DataFrame já pronto (de arquivo ou de texto colado) e processa.
+    Único efeito no banco: criar/atualizar Veiculo (placa + motorista).
+    """
+    mapa = _mapear_colunas(df)
+
+    erros_cabecalho = [
+        f"Coluna '{c}' não encontrada — verifique o cabeçalho da planilha"
+        for c in ("placa", "motorista", "data", "hora", "cliente")
+        if mapa[c] is None
+    ]
+    if erros_cabecalho:
+        return {
+            "veiculos_novos": 0, "veiculos_atualizados": 0,
+            "linhas_lidas": [],
+            "erros": [{"linha": 1, "erro": e} for e in erros_cabecalho],
+        }
 
     veiculos_novos = 0
     veiculos_atualizados = 0
     linhas_lidas: list[LinhaColeta] = []
     erros = []
 
-    data_primeira_linha = df.iloc[0, 0]
-    data_obj = _parse_date(data_primeira_linha) # Usa sua função existente
-
-
     for idx, row in df.iterrows():
         try:
-            data_coleta  = _parse_date(row.iloc[0] if len(row) > 0 else None)
-            hora_str     = _parse_hora(row.iloc[3] if len(row) > 3 else None)
-            cliente_nome = _clean(row.iloc[4] if len(row) > 4 else None)
-            obs          = _clean(row.iloc[5] if len(row) > 5 else None)
-            placa        = _clean(row.iloc[7] if len(row) > 7 else None)
-            motorista    = _clean(row.iloc[8] if len(row) > 8 else None)
+            data_coleta  = _parse_date(_col(row, mapa, "data"))
+            hora_str     = _parse_hora(_col(row, mapa, "hora"))
+            cliente_nome = _clean(_col(row, mapa, "cliente"))
+            obs          = _clean(_col(row, mapa, "obs"))
+            placa        = _clean(_col(row, mapa, "placa"))
+            motorista    = _clean(_col(row, mapa, "motorista"))
 
             if not placa:
-                continue  # linha sem placa — pula
+                continue
 
-            # ── ÚNICO efeito no banco: cadastrar/atualizar Veiculo ──────────
+            # único efeito no banco
             veiculo = db.query(Veiculo).filter(Veiculo.placa == placa).first()
             if not veiculo:
                 db.add(Veiculo(placa=placa, motorista=motorista or None))
+                db.flush()
                 veiculos_novos += 1
             elif motorista and veiculo.motorista != motorista:
                 veiculo.motorista = motorista
                 veiculos_atualizados += 1
 
-            # ── guardar para gerar WhatsApp ─────────────────────────────────
             linhas_lidas.append(LinhaColeta(
                 data=data_coleta,
                 hora=hora_str,
@@ -112,10 +154,50 @@ def importar_programacao(conteudo: bytes, db: Session) -> dict:
             erros.append({"linha": int(idx) + 2, "erro": str(e)})
 
     db.commit()
-    
     return {
         "veiculos_novos": veiculos_novos,
         "veiculos_atualizados": veiculos_atualizados,
         "linhas_lidas": linhas_lidas,
         "erros": erros,
     }
+
+
+# ── entradas públicas ─────────────────────────────────────────────────────────
+
+def importar_texto(texto: str, db: Session) -> dict:
+    """
+    Entrada via cola direta (Ctrl+C no Sagy → Ctrl+V no ColetaFlow).
+    O Sagy copia como TSV (colunas separadas por tab), igual ao Excel.
+    A primeira linha deve ser o cabeçalho.
+    """
+    if not texto or not texto.strip():
+        return {
+            "veiculos_novos": 0, "veiculos_atualizados": 0,
+            "linhas_lidas": [],
+            "erros": [{"linha": -1, "erro": "Nenhum dado colado"}],
+        }
+    try:
+        df = pd.read_csv(io.StringIO(texto), sep="\t", dtype=str)
+    except Exception as e:
+        return {
+            "veiculos_novos": 0, "veiculos_atualizados": 0,
+            "linhas_lidas": [],
+            "erros": [{"linha": -1, "erro": f"Erro ao ler dados colados: {e}"}],
+        }
+    return _processar_df(df, db)
+
+
+def importar_programacao(conteudo: bytes, db: Session) -> dict:
+    """Entrada via arquivo Excel ou CSV (mantida para compatibilidade)."""
+    try:
+        df = pd.read_excel(io.BytesIO(conteudo), dtype=str)
+    except Exception:
+        try:
+            df = pd.read_csv(io.BytesIO(conteudo), dtype=str)
+        except Exception as e:
+            return {
+                "veiculos_novos": 0, "veiculos_atualizados": 0,
+                "linhas_lidas": [],
+                "erros": [{"linha": -1, "erro": f"Formato inválido: {e}"}],
+            }
+    return _processar_df(df, db)

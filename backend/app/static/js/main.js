@@ -780,53 +780,62 @@ function showToast(msg, tipo = "success") {
   setTimeout(() => { div.style.opacity="0"; setTimeout(() => div.remove(), 400); }, 3000);
 }
 
-// ─── IMPORTAR PROGRAMAÇÃO ────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
-    const btn = document.getElementById("btnImportar");
-    if (btn) {
-        btn.addEventListener("click", importarProgramacao);
-    }
-});
+// ─── COLAR PROGRAMAÇÃO ───────────────────────────────────────
 
+function abrirModalColar() {
+  const area = document.getElementById("textoColar");
+  if (area) area.value = "";
+  const modal = new bootstrap.Modal(document.getElementById("modalColar"));
+  modal.show();
+  // foca no textarea para o usuário já poder colar
+  setTimeout(() => { if (area) area.focus(); }, 400);
+}
 
-async function importarProgramacao() {
-  const input = document.getElementById("inputProgramacao");
-  if (!input || !input.files.length) {
-    showToast("Selecione um arquivo CSV ou Excel de programação.", "warning");
+async function processarTextoColado() {
+  const texto = document.getElementById("textoColar")?.value?.trim();
+  if (!texto) {
+    showToast("Cole os dados antes de gerar.", "warning");
     return;
   }
-  const form = new FormData();
-  form.append("file", input.files[0]);
 
   try {
-    const resp = await fetch("/importar-programacao", { method: "POST", body: form });
+    const resp = await fetch("/colar-programacao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto }),
+    });
     const data = await resp.json();
 
     if (resp.ok) {
-      showToast(`✅ Importado com sucesso!`, "success");
+      // fechar modal de colar
+      bootstrap.Modal.getInstance(document.getElementById("modalColar"))?.hide();
 
-      if (data.texto_whatsapp) {
-        const modalEl = document.getElementById("modalWhatsApp");
-        const waTexto = document.getElementById("waTexto");
-        const waContador = document.getElementById("waContador");
-        const waDataLabel = document.getElementById("waDataLabel");
+      // abrir modal de WhatsApp com mensagem pronta
+      const waTexto    = document.getElementById("waTexto");
+      const waContador = document.getElementById("waContador");
+      const waDataLabel = document.getElementById("waDataLabel");
 
-        if (waTexto) waTexto.value = data.texto_whatsapp;
-        if (waContador) waContador.textContent = `${data.texto_whatsapp.length} caracteres`;
-        if (waDataLabel) waDataLabel.textContent = "Gerado da planilha importada";
+      if (waTexto) waTexto.value = data.texto_whatsapp || "";
+      if (waContador) waContador.textContent = (data.texto_whatsapp?.length || 0) + " caracteres";
+      if (waDataLabel) {
+        const info = [];
+        if (data.veiculos_novos)      info.push(`${data.veiculos_novos} placa(s) nova(s)`);
+        if (data.veiculos_atualizados) info.push(`${data.veiculos_atualizados} motorista(s) atualizado(s)`);
+        waDataLabel.textContent = info.length ? info.join(" · ") : "Gerado do Sagy";
+      }
 
-        if (modalEl) {
-          const modal = new bootstrap.Modal(modalEl);
-          modal.show();
-        }
+      const modalWa = new bootstrap.Modal(document.getElementById("modalWhatsApp"));
+      modalWa.show();
+
+      if (data.erros?.length) {
+        console.warn("Avisos na importação:", data.erros);
       }
     } else {
-      showToast("Erro: " + (data.detail || "Falha na importação"), "danger");
+      showToast("Erro: " + (data.detail || "Falha ao processar dados"), "danger");
     }
   } catch (e) {
     showToast("Erro de conexão: " + e.message, "danger");
   }
-  input.value = "";
 }
 
 // ─── MODAL WHATSAPP ──────────────────────────────────────────
@@ -869,7 +878,7 @@ async function buscarMensagemWhatsApp() {
 
 async function copiarMensagemWhatsApp() {
   const texto = document.getElementById("waTexto").value;
-  if (!texto || texto.startsWith("PROGRAMAÇÃO") === false) {
+  if (!texto || !texto.trim()) {
     showToast("Gere a mensagem antes de copiar.", "warning");
     return;
   }
