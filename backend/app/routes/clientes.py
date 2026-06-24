@@ -353,13 +353,27 @@ async def atualizar_cliente(
     dados_dict = dados.model_dump(exclude_unset=True)
     for campo, valor in dados_dict.items():
         setattr(cliente, campo, valor)
-    
+
+    # Recalcular proxima_coleta automaticamente se frequencia_dias mudou.
+    # Base: ultima_coleta (data real da última coleta confirmada).
+    # Se nao houver ultima_coleta, nao ha base de calculo — mantem como esta.
+    if "frequencia_dias" in dados_dict:
+        if cliente.ultima_coleta and cliente.frequencia_dias:
+            cliente.proxima_coleta = cliente.ultima_coleta + timedelta(days=cliente.frequencia_dias)
+            logger.info(
+                f"proxima_coleta recalculada: cliente={cliente_id} "
+                f"ultima={cliente.ultima_coleta} "
+                f"freq={cliente.frequencia_dias}d "
+                f"proxima={cliente.proxima_coleta}"
+            )
+
     db.commit()
     db.refresh(cliente)
-    
+
     return {
         "mensagem": "Cliente atualizado com sucesso",
-        "cliente_id": cliente.id
+        "cliente_id": cliente.id,
+        "proxima_coleta": cliente.proxima_coleta.isoformat() if cliente.proxima_coleta else None,
     }
 
 # ═══════════════════════════════════════════════════════════════════════════════
