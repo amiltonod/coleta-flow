@@ -95,19 +95,21 @@
                                     <button
                                         class="btn btn-sm btn-outline-secondary dropdown-toggle"
                                         type="button"
-                                        data-bs-toggle="dropdown">
+                                        data-bs-toggle="dropdown"
+                                        data-bs-auto-close="outside">
                                         📌
                                     </button>
 
                                     <ul class="dropdown-menu p-2">
                                         {% for dia in ['Segunda','Terça','Quarta','Quinta','Sexta'] %}
-                                        <li>
-                                            <label class="dropdown-item">
+                                        <li onclick="event.stopPropagation()">
+                                            <label class="dropdown-item" onclick="event.stopPropagation()">
                                                 <input
                                                     type="checkbox"
                                                     class="checkbox-dia-fixo"
                                                     data-cliente-id="{{ c.id }}"
                                                     value="{{ dia }}"
+                                                    onclick="event.stopPropagation()"
                                                     {% if dia in dias_fixos %}checked{% endif %}
                                                 >
                                                 {{ dia }}
