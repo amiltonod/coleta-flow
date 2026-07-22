@@ -64,11 +64,38 @@ async def home(request: Request, db: Session = Depends(get_db)):
     clientes = db.query(Client).all()
     schedules = db.query(Schedule).all()
     fixos = db.query(Client).filter(Client.fixo == True).all()
-    
+
+    # Atraso (em dias) da ÚLTIMA coleta concluída de cada cliente:
+    # diferença entre a data que estava agendada (data_agendada) e a data
+    # que realmente aconteceu (data_coleta, atualizada na confirmação).
+    # Só existe pra agendamentos criados a partir da introdução da coluna
+    # data_agendada — coletas antigas não têm esse dado.
+    ultimas_concluidas = (
+        db.query(Schedule)
+        .filter(
+            Schedule.status == "Concluído",
+            Schedule.data_agendada.isnot(None),
+        )
+        .order_by(Schedule.codigo_cliente, Schedule.data_coleta.desc())
+        .all()
+    )
+
+    atraso_por_cliente = {}
+    for agendamento in ultimas_concluidas:
+        if agendamento.codigo_cliente in atraso_por_cliente:
+            continue  # já pegamos a mais recente desse cliente
+        dias = (agendamento.data_coleta - agendamento.data_agendada).days
+        atraso_por_cliente[agendamento.codigo_cliente] = dias
+
     return templates.TemplateResponse(
         name="index.html",
         request=request,
-        context={"clientes": clientes, "schedules": schedules, "fixos": fixos}
+        context={
+            "clientes": clientes,
+            "schedules": schedules,
+            "fixos": fixos,
+            "atraso_por_cliente": atraso_por_cliente,
+        }
     )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -292,6 +319,7 @@ async def adicionar_coleta_manual(
             cliente=cliente.nome,
             unidade=cliente.unidade,
             data_coleta=dados.data_coleta,
+            data_agendada=dados.data_coleta,
             dia_semana=DIAS_SEMANA.get(dados.data_coleta.weekday(), "Desconhecido"),
             status="Programado",
             fixo=False

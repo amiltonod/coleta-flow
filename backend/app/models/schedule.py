@@ -42,3 +42,9 @@ class Schedule(Base):
 
     # Qual veículo faz essa coleta
     veiculo_id  = Column(Integer, ForeignKey("veiculos.id"), nullable=True, index=True)
+
+    # Data ORIGINAL programada (nunca é sobrescrita).
+    # data_coleta passa a valer como data REAL após a confirmação — essa aqui
+    # guarda o que estava previsto, pra calcular atraso depois.
+    # OBS: só é preenchida em agendamentos criados a partir desta versão.
+    data_agendada = Column(Date, nullable=True)

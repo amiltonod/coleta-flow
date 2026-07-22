@@ -70,6 +70,7 @@
                             <th>Cidade</th>
                             <th width="65" class="text-center">Freq</th>
                             <th width="115">Dia Fixo</th>
+                            <th width="110" class="text-center">Feito em</th>
                             <th width="115">Última Coleta</th>
                             <th width="130">Próxima Coleta</th>
                             <th>Obs</th>
@@ -118,6 +119,18 @@
                                         {% endfor %}
                                     </ul>
                                 </div>
+                            </td>
+                            <td class="text-center">
+                                {% set atraso = atraso_por_cliente.get(c.codigo) %}
+                                {% if atraso is not none %}
+                                <span
+                                    class="badge-coletas-semana {{ 'badge-coletas-ok' if atraso <= 0 else 'badge-coletas-pendente' }}"
+                                    title="Última coleta: {{ 'feita ' + atraso|string + ' dia(s) em atraso' if atraso > 0 else ('feita no dia programado' if atraso == 0 else 'feita ' + (atraso * -1)|string + ' dia(s) antes do programado') }}">
+                                    {{ '+' if atraso > 0 else '' }}{{ atraso }}
+                                </span>
+                                {% else %}
+                                <span style="color: var(--texto-mutado);">—</span>
+                                {% endif %}
                             </td>
                             <td>
                                 <input type="text" class="input-inline data-coleta-input" style="font-weight: 500;" value="{{ c.ultima_coleta or '' }}" placeholder="dd/mm/aaaa" onblur="processarDataExibicao(this, {{ c.id }})">
