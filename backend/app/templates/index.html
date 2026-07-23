@@ -70,7 +70,7 @@
                             <th>Cidade</th>
                             <th width="65" class="text-center">Freq</th>
                             <th width="115">Dia Fixo</th>
-                            <th width="110" class="text-center">Feito em</th>
+                            <th width="110" class="text-center">Feito em (dias)</th>
                             <th width="115">Última Coleta</th>
                             <th width="130">Próxima Coleta</th>
                             <th>Obs</th>
@@ -121,12 +121,19 @@
                                 </div>
                             </td>
                             <td class="text-center">
-                                {% set atraso = atraso_por_cliente.get(c.codigo) %}
-                                {% if atraso is not none %}
+                                {% set intervalo = intervalo_por_cliente.get(c.codigo) %}
+                                {% if intervalo is not none and c.frequencia_dias %}
+                                {% if intervalo == c.frequencia_dias %}
+                                    {% set cor_classe = 'badge-coletas-ok' %}
+                                {% elif intervalo < c.frequencia_dias %}
+                                    {% set cor_classe = 'badge-coletas-antecipado' %}
+                                {% else %}
+                                    {% set cor_classe = 'badge-coletas-atraso' %}
+                                {% endif %}
                                 <span
-                                    class="badge-coletas-semana {{ 'badge-coletas-ok' if atraso <= 0 else 'badge-coletas-pendente' }}"
-                                    title="Última coleta: {{ 'feita ' + atraso|string + ' dia(s) em atraso' if atraso > 0 else ('feita no dia programado' if atraso == 0 else 'feita ' + (atraso * -1)|string + ' dia(s) antes do programado') }}">
-                                    {{ '+' if atraso > 0 else '' }}{{ atraso }}
+                                    class="badge-coletas-semana {{ cor_classe }}"
+                                    title="Intervalo real entre as duas últimas coletas: {{ intervalo }} dia(s) — frequência cadastrada: {{ c.frequencia_dias }} dia(s)">
+                                    {{ intervalo }}
                                 </span>
                                 {% else %}
                                 <span style="color: var(--texto-mutado);">—</span>

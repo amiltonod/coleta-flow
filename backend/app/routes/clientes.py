@@ -65,27 +65,27 @@ async def home(request: Request, db: Session = Depends(get_db)):
     schedules = db.query(Schedule).all()
     fixos = db.query(Client).filter(Client.fixo == True).all()
 
-    # Atraso (em dias) da ÚLTIMA coleta concluída de cada cliente:
-    # diferença entre a data que estava agendada (data_agendada) e a data
-    # que realmente aconteceu (data_coleta, atualizada na confirmação).
-    # Só existe pra agendamentos criados a partir da introdução da coluna
-    # data_agendada — coletas antigas não têm esse dado.
-    ultimas_concluidas = (
+    # Intervalo real (em dias) entre as DUAS últimas coletas concluídas de
+    # cada cliente — comparado com a frequência cadastrada (frequencia_dias).
+    # Ex: última coleta dia 12, coleta anterior dia 24 → intervalo de 12 dias.
+    # Precisa de pelo menos 2 coletas concluídas pra existir.
+    concluidas = (
         db.query(Schedule)
-        .filter(
-            Schedule.status == "Concluído",
-            Schedule.data_agendada.isnot(None),
-        )
+        .filter(Schedule.status == "Concluído")
         .order_by(Schedule.codigo_cliente, Schedule.data_coleta.desc())
         .all()
     )
 
-    atraso_por_cliente = {}
-    for agendamento in ultimas_concluidas:
-        if agendamento.codigo_cliente in atraso_por_cliente:
-            continue  # já pegamos a mais recente desse cliente
-        dias = (agendamento.data_coleta - agendamento.data_agendada).days
-        atraso_por_cliente[agendamento.codigo_cliente] = dias
+    datas_por_cliente = {}
+    for agendamento in concluidas:
+        lista = datas_por_cliente.setdefault(agendamento.codigo_cliente, [])
+        if len(lista) < 2:
+            lista.append(agendamento.data_coleta)
+
+    intervalo_por_cliente = {}
+    for codigo, datas in datas_por_cliente.items():
+        if len(datas) == 2:
+            intervalo_por_cliente[codigo] = (datas[0] - datas[1]).days
 
     return templates.TemplateResponse(
         name="index.html",
@@ -94,7 +94,7 @@ async def home(request: Request, db: Session = Depends(get_db)):
             "clientes": clientes,
             "schedules": schedules,
             "fixos": fixos,
-            "atraso_por_cliente": atraso_por_cliente,
+            "intervalo_por_cliente": intervalo_por_cliente,
         }
     )
 
